@@ -1,11 +1,11 @@
 # NASA Space Apps Challenge 2026 | Earth System Trend Detective
 
 **Event:** November 14–15, 2026  
-**Challenge:** [Be An Earth System Trend Detective!](https://www.spaceappschallenge.org/2026/challenges/be-an-earth-system-trend-detective/)  
+**Challenge:** [Be An Earth System Trend Detective!](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/)  
 **Status:** Pre-event repository setup only; no competition solution has been built.
 
 ## Background
-The official challenge concerns detecting and explaining trends in Earth-system variables from satellite measurements and/or Earth-system models, including spatial and temporal changes and assessing statistical significance. Read the [official challenge statement](https://www.spaceappschallenge.org/2026/challenges/be-an-earth-system-trend-detective/) for the full requirements.
+The official challenge concerns detecting and explaining trends in Earth-system variables from satellite measurements and/or Earth-system models, including spatial and temporal changes and assessing statistical significance. Read the [official challenge statement](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/) for the full requirements.
 
 ## Repository workflow
 This is a private coordination workspace for a team of up to six people. The initial contents are administrative only. Any actual competition software, analysis, data processing, visualizations, designs, and presentation are to be developed during the hackathon.
@@ -18,3 +18,9 @@ This is a private coordination workspace for a team of up to six people. The ini
 Read [contribution rules](CONTRIBUTING.md), [setup steps](SETUP.md), and [competition compliance](docs/competition-compliance.md) before work begins.
 
 **Independent participant project; unaffiliated with or endorsed by NASA.**
+
+## AI and editor preparation
+
+Start with [AGENTS.md](AGENTS.md), [the resource index](docs/research/resource-index.md), and [reading notes](docs/research/reading-notes.md). Claude imports the same instructions through CLAUDE.md.
+
+VS Code recommendations and an optional Dev Container configure tools only. Supabase MCP exposes documentation; Vercel MCP is configured but disabled. Authentication and local installation still happen on each developer's machine. See [SETUP.md](SETUP.md).
