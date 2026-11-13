@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "openai.chatgpt",
+    "anthropic.claude-code",
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "GitHub.vscode-pull-request-github",
+    "MS-vsliveshare.vsliveshare",
+    "EditorConfig.EditorConfig",
+    "ms-vscode-remote.remote-containers"
+  ]
+}
