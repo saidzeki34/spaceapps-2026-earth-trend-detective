@@ -42,3 +42,19 @@ data/processed/
 *.log
 *.secret
 *.local
+
+# Local assistant sessions, credentials and service state
+.claude/settings.local.json
+CLAUDE.local.md
+.codex/auth.json
+.codex/history.jsonl
+.codex/sessions/
+.codex/log/
+.codex/*.sqlite*
+.supabase/
+supabase/.temp/
+supabase/.branches/
+.netrc
+.netrc.*
+.dodsrc
+.urs_cookies
