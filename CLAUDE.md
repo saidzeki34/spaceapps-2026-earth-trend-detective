@@ -1,3 +1,3 @@
 @AGENTS.md
 
-Shared preparation and research guidance is maintained in AGENTS.md. Follow its reading order before answering project questions. No competition implementation is authorized by this file.
+Preparation has ended. The current delivery is documentation and empty placeholders only; teammates will implement the application. Follow the latest scope and main-based branch workflow in AGENTS.md.

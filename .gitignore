@@ -58,3 +58,6 @@ supabase/.branches/
 .netrc.*
 .dodsrc
 .urs_cookies
+tmp/
+*.egg-info/
+data/exports/
