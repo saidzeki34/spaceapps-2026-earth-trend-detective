@@ -1,26 +1,36 @@
-# NASA Space Apps Challenge 2026 | Earth System Trend Detective
+# Mountain Water Availability
 
-**Event:** November 14–15, 2026  
-**Challenge:** [Be An Earth System Trend Detective!](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/)  
-**Status:** Pre-event repository setup only; no competition solution has been built.
+One Python/Streamlit application for measured mountain-catchment discharge, seasonal change and exposure to a user-defined water requirement. Implements **Codex_Project_Handoff (3).pdf** for the Oslo NASA Space Apps 2026 team.
 
-## Background
-The official challenge concerns detecting and explaining trends in Earth-system variables from satellite measurements and/or Earth-system models, including spatial and temporal changes and assessing statistical significance. Read the [official challenge statement](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/) for the full requirements.
+The catalogue includes NVE Atnasjø (2.32.0), Norway, and FOEN Chamuerabach at La Punt-Chamues-ch (2263), Switzerland, with matched upstream polygons. Norway requires an NVE HydAPI key. Switzerland uses measured CAMELS-CH v0.9 archive observations (1981–2020). NASA MODIS snow-index context requires authenticated Earth Engine access. There is no synthetic fallback.
 
-## Repository workflow
-This is a private coordination workspace for a team of up to six people. The initial contents are administrative only. Any actual competition software, analysis, data processing, visualizations, designs, and presentation are to be developed during the hackathon.
+## Run
+Use Python 3.11 in a virtual environment; see [SETUP.md](SETUP.md).
 
-- `main`: stable reviewed work / final submission.
-- `develop`: collaboration and integration.
-- `work/data`, `work/analysis`, `work/visualization`, `work/frontend`, `work/backend`, `work/presentation`: reserved workstream branches, with no solution work.
-- During the event, prefer short-lived `feature/<issue>-<topic>` branches and pull requests into `develop`.
+```text
+python -m pip install -c constraints.txt -e ".[dev]"
+python ExecuteProgram.py
+```
 
-Read [contribution rules](CONTRIBUTING.md), [setup steps](SETUP.md), and [competition compliance](docs/competition-compliance.md) before work begins.
+Select a catchment and run an assessment. The labelled developer demo works offline. For measured data, choose Switzerland, 2011–2020 and reference years 2001–2010. NASA access is configured independently.
 
-**Independent participant project; unaffiliated with or endorsed by NASA.**
+## Features
+- Quality-aware volume, complete seasonal/year summaries and half-volume timing.
+- Calendar-day reference distributions, separate from scenario requirements.
+- Time-weighted interval-average deficits, margins and gap-censored events.
+- Quantity, timing and residual-variability axes, with a 2D alternative.
+- Catchment-weighted NASA snow-index context and valid-area coverage.
+- A 12-month seasonal-climatology outlook with chronological hindcasts.
+- CSV/JSON evidence export with sources, assumptions and access states.
 
-## AI and editor preparation
+Results are exploratory. Observed flow includes historical management; scenario shortfall does not establish service failure. Monthly forecasts cannot establish daily events. Historical quantiles are not prediction intervals. The custom team equation remains unavailable until supplied.
 
-Start with [AGENTS.md](AGENTS.md), [the resource index](docs/research/resource-index.md), and [reading notes](docs/research/reading-notes.md). Claude imports the same instructions through CLAUDE.md.
+## Development
+Main is the shared foundation; small branches and PRs target main. See [CONTRIBUTING.md](CONTRIBUTING.md), [architecture](docs/architecture.md), [contracts](docs/data-contracts.md), [methods](docs/methods.md), [tasks](docs/task-checklist.md), [demo](docs/demo-guide.md) and [validation](docs/validation.md).
 
-VS Code recommendations and an optional Dev Container configure tools only. Supabase MCP exposes documentation; Vercel MCP is configured but disabled. Authentication and local installation still happen on each developer's machine. See [SETUP.md](SETUP.md).
+```text
+python -m ruff check .
+python -m pytest
+```
+
+Software is MIT licensed; data retain their own terms in the [source ledger](docs/source-ledger.md). No database or deployment is required.

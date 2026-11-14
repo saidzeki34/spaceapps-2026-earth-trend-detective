@@ -1,55 +1,68 @@
-# Connect to VS Code
+# Local development
 
-The repository is already hosted on GitHub. **Do not create another repository or run `git init` in a new project folder.**
+Python **3.11** is tested. constraints.txt records resolved versions; pyproject.toml declares dependencies.
 
-1. In VS Code press `Ctrl+Shift+P`.
-2. Search for **Git: Clone**, then paste `https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective.git`.
-3. Choose a local folder and select **Open** when VS Code prompts you.
-4. Use the branch selector at the bottom left, or press `Ctrl+Shift+P` → **Git: Checkout to...** → `develop`.
-5. Invite teammates from GitHub repository **Settings → Collaborators and teams** using their GitHub usernames. Each should clone the same repository.
-
-For reference, open a terminal via **Terminal → New Terminal** or `Ctrl+` ` (backtick), and use:
+## Windows PowerShell
 ```powershell
-git fetch origin
-git switch develop
-git pull --ff-only origin develop
+py -3.11 -m venv .venv
+.venv\Scripts\python.exe -m pip install -c constraints.txt -e ".[dev]"
+.venv\Scripts\python.exe ExecuteProgram.py
 ```
 
-During the event create new `feature/<issue>-<topic>` branches. Create PRs targeting `develop` rather than directly pushing into `main`.
+If py is absent, use your installed Python 3.11 executable to create the environment. Activation is optional; explicit paths avoid changing execution policy.
 
-Set appropriate branch rules under GitHub **Settings → Rules → Rulesets** if available. Block deletions and force pushes on `main`/`develop`; use PR review when supported. Confirm these rules are actually active. Store API keys in GitHub/Vercel/Supabase secrets, never in source control.
+## macOS / Linux
+```sh
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -c constraints.txt -e ".[dev]"
+.venv/bin/python ExecuteProgram.py
+```
 
-## Prepared editor environment
+Arguments are forwarded to Streamlit, e.g. --server.port 8502. Alternatively run python -m streamlit run streamlit_app.py. Stop with Ctrl+C.
 
-After pulling the preparation changes into your checkout, open the repository root in VS Code and run **Extensions: Show Recommended Extensions**. Install the workspace recommendations. They include Codex, Claude Code, Python/Jupyter, ESLint, Prettier, GitHub PRs, Live Share, EditorConfig and Dev Containers. A recommendation file does not itself install extensions on your computer.
+## Editor and checks
+Select the virtual environment in VS Code; tracked tasks use that interpreter. The optional devcontainer uses Python 3.11; container execution was not tested here.
 
-Optional: use **Dev Containers: Reopen in Container** with Docker, or open this branch in GitHub Codespaces. The configuration installs Node 22, Python 3.12 and editor extensions. It does not scaffold an application, install application dependencies, run data analysis, start a server or deploy anything. Codespaces usage can consume your account quota. The container build has not been executed in the preparation environment because Docker is unavailable there.
+```text
+python -m ruff check .
+python -m pytest
+```
 
-Sign into Codex and Claude with your own accounts. Do not share account tokens. Codex reads AGENTS.md; CLAUDE.md imports it for Claude. Start both tools in this repository root. Cloud agents need access to this repository and the branch containing these files; the files do not grant account access automatically. A Dev Container does not configure every hosted Codex/Claude runtime.
+If system temp is inaccessible, use a new disposable directory inside the checkout: python -m pytest --basetemp=tmp/check-1. Pytest may erase an existing basetemp directory; never point it at source files.
 
-## Supabase and Vercel connections
+## Provider access
+Copy .env.example to .env locally. Never commit it or credentials.
 
-These are official remote MCP connections, not application SDKs. Repository definitions are in .mcp.json (Claude) and .codex/config.toml (Codex). Codex project settings apply only after the checkout is trusted. Review the definitions and authenticate through the relevant client; credentials stay outside Git.
+- Switzerland needs no key for the pinned archive. Bounded HTTP byte ranges read the station's observed ZIP member and verify its CRC. If range access is blocked, extract the official archive and set CAMELS_CH_DIR to its root. Coverage is historical 1981–2020. The archive's timezone is unresolved; labels use nominal 24-hour UTC intervals.
+- Norway requires your own NVE HydAPI key in NVE_API_KEY. Missing credentials return authentication_required. Daily means use fixed Norwegian standard-day intervals.
+- NASA requires EARTH_ENGINE_PROJECT with enabled/registered Earth Engine access, then earthengine authenticate using this environment. Credentials remain in the provider's local store. The app does not create projects or enable billing. Missing access, quotas and processing failures stay visible.
 
-| Connection | Prepared state | What remains |
-| --- | --- | --- |
-| Supabase | Documentation-only feature group, read_only=true | Client trust/OAuth if requested; project access is deliberately absent |
-| Vercel | Official endpoint, disabled in both clients | Enable after competition start, authenticate and confirm the correct team/project |
+Caches live in ignored data/cache or WATER_CACHE_DIR and retain provenance. Keys and exports contain no credentials. For an explicit network check:
 
-No Supabase or Vercel project was created, linked, queried or deployed by this preparation. No GitHub App installation or dashboard environment variables were changed. No credentials or project IDs are assumed.
+```text
+python -m scripts.check_live
+```
 
-After the official start and team instruction:
-1. Confirm the intended Supabase project and Vercel team/project. Create them only if needed and authorized.
-2. For Supabase, replace the docs-only URL with the official project-scoped URL containing project_ref and read_only=true. Start with docs,database features; retain read-only access until a specific write task is authorized. Do not use organization-wide default access.
-3. For Vercel, set enabled=true in .codex/config.toml and remove vercel from disabledMcpjsonServers in .claude/settings.json. Authenticate with Codex's MCP login flow or Claude's /mcp menu. Inspect the available tools before using them.
-4. Verify account/target access with a harmless read. Record success or the precise failure; configuration alone is not a connection test.
-5. Choose the framework during the event. Then install its SDKs/CLI dependencies and implement the app. If importing the repo into Vercel, inspect production/preview settings and automatic deployments before proceeding.
-6. Keep Supabase secret/service_role keys server-only. Browser publishable keys require correctly configured access policies. Do not put database passwords, Earthdata credentials, NOAA tokens or Vercel tokens in frontend environment variables or Git. Set real environment variables in the platform's secret UI or ignored local files.
+Reports go to ignored data/exports. Live checks are outside CI; unavailable routes are not reported as successful.
 
-References: [Codex MCP](https://developers.openai.com/codex/mcp/), [Claude memory](https://code.claude.com/docs/en/memory), [Claude MCP](https://code.claude.com/docs/en/mcp), [Supabase MCP](https://supabase.com/docs/guides/ai-tools/mcp), [Supabase keys](https://supabase.com/docs/guides/getting-started/api-keys), [Vercel MCP](https://vercel.com/docs/agent-resources/vercel-mcp), [Vercel GitHub integration](https://vercel.com/docs/git/vercel-for-github).
+## Imports and catalogue
+Flow/driver CSVs require separate provenance JSON and the selected outlet ID. See docs/data-contracts.md and examples/ for labelled format examples. Blanks remain missing.
 
-## Starting a later AI session
+Verified catalogue metadata and polygons are checked in. To deliberately rebuild from providers:
 
-Ask the agent to read AGENTS.md and its linked research notes, report the current preparation restriction, identify source-access gaps, and wait for a task. Once the event starts, explicitly authorize the first implementation task. Do not ask two agents to edit the same checkout concurrently.
+```text
+python -m pip install -c constraints.txt -e ".[dev,catalogue]"
+python -m scripts.build_catalogue
+```
 
-Reserved work/* branches may predate this preparation. Before using one, fetch origin and merge origin/develop without rewriting history, or preferably create a fresh feature branch from updated develop. Never reset a teammate's branch to make it match.
+This optional network task downloads into ignored data/raw. Review source changes and geometries before committing.
+
+## Branches
+```text
+git fetch origin
+git switch main
+git pull --ff-only
+git switch -c feature/your-small-task
+```
+
+Preserve uncommitted work. Use separate worktrees for simultaneous writers. Open PRs to main after checks; preserve develop and work/* branches. Setup does not authorize deployment.

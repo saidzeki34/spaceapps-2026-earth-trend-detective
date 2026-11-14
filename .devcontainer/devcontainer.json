@@ -1,12 +1,12 @@
 {
-  "name": "Space Apps preparation",
+  "name": "Mountain Water development",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
     "ghcr.io/devcontainers/features/node:2": {
       "version": "22"
     },
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.12"
+      "version": "3.11"
     }
   },
   "customizations": {

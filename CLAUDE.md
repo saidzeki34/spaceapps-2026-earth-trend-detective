@@ -1,3 +1,3 @@
 @AGENTS.md
 
-Shared preparation and research guidance is maintained in AGENTS.md. Follow its reading order before answering project questions. No competition implementation is authorized by this file.
+Active competition development follows the shared contracts and main-based PR workflow. The selected reference is Codex_Project_Handoff (3).pdf. Read SETUP.md before running checks.

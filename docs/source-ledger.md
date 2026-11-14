@@ -1,9 +1,23 @@
-# Source and license ledger
+# Source and licence ledger
 
-Fill in when materials are actually used. Do not portray researched resources as used in the submission until they are used.
+Updated 2026-11-15. Research references are not automatically claimed as application inputs. This ledger distinguishes actual use from implemented access routes.
 
-| Resource | Provider | URL/DOI | Use | License | Access date | Attribution |
-| --- | --- | --- | --- | --- | --- | --- |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| Material | Source/version | Actual use and transformations | Terms / attribution |
+| --- | --- | --- | --- |
+| Selected project handoff | User-supplied Codex_Project_Handoff (3).pdf | Read as implementation scope; other versions excluded | User-provided reference; not redistributed |
+| NVE gauge and upstream boundary | [HydrologiskeData3](https://kart.nve.no/enterprise/rest/services/HydrologiskeData3/MapServer), layers 0 and 38; queried 2026-11-15 local date | Atnasjø station 2.32.0, matched compoundkey12; total upstream catchment 43, 463.3 km²; provider geometry requested as EPSG:4326, retained in config/catchments | NVE / NLOD; retain provider attribution; regulation code 100 meaning unresolved |
+| Swiss gauge, attributes, upstream boundary | [CAMELS-CH v0.9, record 15025258](https://zenodo.org/records/15025258), DOI 10.5281/zenodo.15025258 | gauge_id 2263 joins observed station, attributes and full polygon; original EPSG:2056 coordinates transformed to EPSG:4326 with pyproj, rounded to 6 decimals for polygon. Area 73.4 km², mean elevation 2544.42 m; metadata retrieved 2026-11-15 local date | CC BY 4.0; Höge et al. (2023), [paper](https://doi.org/10.5194/essd-15-5755-2023), Eawag and FOEN |
+| Swiss observed flow route | Same pinned archive; observation_based/CAMELS_CH_obs_based_2263.csv, 1981–2020 | Selected ZIP member read with bounded byte ranges and ZIP CRC validation. discharge_vol(m3/s), blanks/negative/nonfinite invalid; nominal 24h UTC intervals; no per-observation quality flags supplied. Actual assessment result recorded in validation.md after the live check | Same archive attribution; FOEN warns winter ice can affect measurements. No claim of current live flow or naturalised supply |
+| NVE observed flow adapter | [HydAPI v1 docs](https://hydapi.nve.no/UserDocumentation/), parameter 1001, Mean, resolution 1440 | Implemented and mocked; live observation retrieval requires NVE_API_KEY. Preserve quality/correction codes, reject unknown/uncontrolled/modelled/interpolated values; 11Z daily labels shifted -12h to fixed standard-day start. Cache includes station, dates, geometry, quality, calendar and aggregation | NVE, NLOD. Series version and retrieval timestamps retained in exports. Live success not claimed |
+| NASA snow-index adapter | [MODIS/061/MOD10A1](https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD10A1); DOI 10.5067/MODIS/MOD10A1.061 | Implemented; authenticated retrieval not yet verified. NDSI_Snow_Cover index 0–100, nominal daily 500m grid. Basic QA 0/1 and algorithm bits 0,1,2,3,4,7 clear; area-weighted accepted-pixel index, independent full-catchment area denominator; mean withheld below 50% valid area. No downloaded NASA observations claimed | NASA NSIDC DAAC; Hall and Riggs. Free scientific data use with product citation. [NSIDC explains index versus fractional snow cover](https://nsidc.org/data/user-resources/help-center/what-ndsi-snow-cover-and-how-does-it-compare-fsc) |
+| Map basemap | OpenStreetMap via Plotly map style | Browser-requested contextual tiles; not an analytical data input | © OpenStreetMap contributors; ODbL attribution shown |
+| Demo and unit fixtures | Locally generated, explicitly synthetic | Numerical and UI checks only; no geographic, measured or NASA evidence | Project MIT licence; never provider fallback |
+| Trend method reference | Künsch (1989), DOI 10.1214/aos/1176347265 | Residual moving-block bootstrap concept. Implementation is an exploratory starter method, not an independently validated scientific result | Citation only; no copied paper text |
+| Software | Python 3.11.13; exact dependencies in constraints.txt | Streamlit, pandas, NumPy, SciPy, Plotly, httpx, dotenv, Earth Engine API; pytest/Ruff for checks; pyshp/pyproj for catalogue generation | Each dependency retains its own licence; project source MIT |
+| AI assistance | OpenAI Codex, 2026-11-15; precise runtime model not asserted | Code, numerical fixtures, source review, catalogue preparation and documentation generated/reviewed with AI; human scientific review outstanding | Disclose actual assistance in final event submission |
 
-Preparation references are indexed separately in [resource-index.md](research/resource-index.md). They are not all claimed as project inputs. This repository preparation was assisted by ChatGPT/Codex on 2026-11-13; disclose actual implementation assistance separately when it occurs.
+Preparation research was assisted by ChatGPT/Codex on 2026-11-13. Implementation began only after the user's explicit start instruction. The machine's UTC retrieval timestamps may fall on 2026-11-14 while Oslo local date is 2026-11-15; exported timestamps are the actual timezone-qualified instants.
+
+The Swiss archive's published full-file size is 247361208 bytes and MD5 is 04f909d9904375647d030c4ab8ddfdbe. **Full-archive checksum verification is not claimed**; the adapter validates selected ZIP members by CRC. Downloaded data, raw shapefiles, caches and evidence bundles are ignored.
+
+Open verification: NASA and NVE authenticated end-to-end retrieval; Swiss daily timezone and per-observation quality limitations; NVE current regulation-code interpretation; human review of thresholds, screening, trend assumptions and scientific claims. The USGS timing reference requested during research returned HTTP 403 and was not used as verified support.

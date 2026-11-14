@@ -1,0 +1,13 @@
+[
+  {
+    "id": "modis_snow",
+    "product": "MODIS/061/MOD10A1",
+    "version": "061",
+    "band": "NDSI_Snow_Cover",
+    "units": "NDSI index (0-100)",
+    "spatial_resolution_m": 500,
+    "minimum_valid_area_fraction": 0.5,
+    "status": "implemented; authenticated live verification pending",
+    "meaning": "Snow-related spectral index, not percent snow area or snow-water volume"
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "example_constant",
+    "name": "Example constant river-flow threshold",
+    "status": "scenario",
+    "units": "m3/s",
+    "default_value": 1,
+    "source": "User-adjustable hypothetical example; not observed demand or a standard",
+    "resilience": "unknown"
+  }
+]

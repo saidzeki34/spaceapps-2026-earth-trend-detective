@@ -1,10 +1,22 @@
-# Contribution workflow
+# Contributing
 
-- `main` is the final reviewed release; `develop` integrates teammate contributions.
-- During the hackathon, create short-lived `feature/<issue>-<topic>` branches from `develop`. Open pull requests into `develop`; merge reviewed `develop` into `main`.
-- Six reserved `work/*` branches are available but are not permanent team assignments.
-- Avoid force pushes and avoid directly editing shared branches.
-- Designate one integration coordinator. Coordinate edits to shared files through issues and PRs; VS Code Live Share is suitable for short pairing/debugging sessions.
-- Never commit credentials, local environment files, private participant information, or restricted datasets.
-- Attribute third-party data, code, images, libraries, models, and AI tools. Maintain the source ledger.
-- Do not implement the actual hackathon solution before the official local start.
+Main is the shared runnable foundation. Create small feature branches from current main and PRs to main. This supersedes the historical develop-based workflow. Preserve develop and work/* branches without resetting or force-pushing.
+
+Agree one human owner per task. Reserved branch names are not permanent assignments. Everyone runs the same ExecuteProgram.py application.
+
+| Workstream | Module boundary |
+| --- | --- |
+| Data/provenance | data, config |
+| Flow/baseline | analysis/flow_metrics.py, baseline.py |
+| Requirement exposure | analysis/risk.py |
+| Trends/variability | analysis/trends.py, variability.py |
+| Outlook/evaluation | models |
+| UI/integration | ui, visualization, services |
+
+Coordinate shared contracts.py changes. Use separate worktrees for concurrent writers. Do not commit someone else's files.
+
+Before review, run Ruff and pytest; update contracts, methods and source ledger as needed. Include behavior, checks and unresolved limitations. Provider network checks are opt-in; mocks are not evidence of live access.
+
+Merge PRs only after required checks and reviews; do not bypass protection. Human review is required for scientific claims. Automated tests do not validate scientific appropriateness. Label unreviewed results exploratory. Tag the exact tested demo commit.
+
+Keep observations, caches, exports, credentials and local settings ignored. Attribute committed boundaries and metadata. Label synthetic fixtures and demo clearly. At handoff record owner, files, checks, provider coverage, limitations, PR and commit. See docs/task-checklist.md.

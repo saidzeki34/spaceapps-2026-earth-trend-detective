@@ -1,0 +1,19 @@
+{
+  "outlet_id": "camels-2263",
+  "calendar_timezone": "UTC",
+  "meaning": "interval_average",
+  "provenance": {
+    "provider": "REPLACE with real provider",
+    "source_url": "REPLACE with real source URL",
+    "identifier": "REPLACE with station/product identifier",
+    "version": "REPLACE with source version",
+    "retrieved_at": "REPLACE with actual ISO timestamp including UTC offset",
+    "license": "REPLACE with verified terms",
+    "attribution": "REPLACE with attribution",
+    "units": "m3/s",
+    "kind": "observed",
+    "transformations": [
+      "REPLACE with actual integration, conversion and quality policy"
+    ]
+  }
+}

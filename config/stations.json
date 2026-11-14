@@ -1,0 +1,40 @@
+[
+  {
+    "id": "camels-2263",
+    "name": "Chamuerabach · La Punt-Chamues-ch",
+    "country": "Switzerland",
+    "provider": "camels_ch",
+    "station_id": "2263",
+    "latitude": 46.56925880831737,
+    "longitude": 9.93595398800487,
+    "catchment_id": "2263",
+    "catchment_area_km2": 73.4,
+    "catchment_source": "https://zenodo.org/records/15025258",
+    "source_url": "https://www.hydrodaten.admin.ch/en/seen-und-fluesse/stations/2263",
+    "supported_start": "1981-01-01",
+    "supported_end": "2020-12-31",
+    "regulation_status": "CAMELS-CH: 0 hydropower installations, 0 reservoirs recorded; future operations unknown",
+    "geometry_path": "config/catchments/camels-2263.geojson",
+    "calendar_timezone": "UTC",
+    "notes": "CAMELS-CH v0.9 gauge_id joins observations, attributes and full upstream polygon. Mean catchment elevation 2544.42 m. FOEN warns of winter ice effects. Archive dates are nominal 24h days; precise subdaily timing is not established."
+  },
+  {
+    "id": "nve-2.32.0",
+    "name": "Atnasjø · Atna",
+    "country": "Norway",
+    "provider": "nve",
+    "station_id": "2.32.0",
+    "latitude": 61.851938540647275,
+    "longitude": 10.222119120362894,
+    "catchment_id": "43",
+    "catchment_area_km2": 463.3,
+    "catchment_source": "https://kart.nve.no/enterprise/rest/services/HydrologiskeData3/MapServer/38",
+    "source_url": "https://sildre.nve.no/station/2.32.0",
+    "supported_start": "1916 (published station history; HydAPI daily coverage checked per query)",
+    "supported_end": "provider-dependent",
+    "regulation_status": "NVE regulation code 100; current meaning not independently resolved",
+    "geometry_path": "config/catchments/nve-2.32.0.geojson",
+    "calendar_timezone": "Etc/GMT-1",
+    "notes": "NVE station and total upstream catchment matched by compoundkey12. 463.3 km² mountain basin; historical report describes unregulated flow, current metadata must be reviewed. Dates/quality depend on HydAPI response."
+  }
+]

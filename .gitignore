@@ -58,3 +58,8 @@ supabase/.branches/
 .netrc.*
 .dodsrc
 .urs_cookies
+*.egg-info/
+.streamlit/secrets.toml
+google-credentials*.json
+data/exports/
+tmp/

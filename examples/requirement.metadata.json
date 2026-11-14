@@ -1,0 +1,9 @@
+{
+  "name": "User-defined scenario",
+  "intended_user": "REPLACE",
+  "source": "REPLACE with scenario assumptions or documented requirement",
+  "status": "scenario",
+  "units": "m3/s",
+  "meaning": "river-flow threshold",
+  "resilience": "unknown"
+}

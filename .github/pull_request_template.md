@@ -1,13 +1,12 @@
-## Summary
-<!-- Link issue and describe the change. -->
+## Change
+Describe behavior and contracts. Target main.
 
-## Testing
-<!-- Reproduction steps, tests, screenshots, scientific uncertainty as applicable. -->
+## Validation
+- [ ] Ruff and pytest; actual results included
+- [ ] Live/access-gated checks reported separately
+- [ ] Contracts, methods and ledger updated as needed
+- [ ] Missingness, units, intervals and quality retained
+- [ ] Scientific claims human-reviewed or marked exploratory
 
-## Attribution
-- [ ] Sources and licensing accounted for when applicable.
-- [ ] No secrets or protected material committed.
-
-## Review
-- [ ] PR targets `develop` or a reviewed final release to `main`.
-- [ ] Teammate requested for review.
+## Handoff
+Owner, files, checks, coverage, limitations and tested commit:
