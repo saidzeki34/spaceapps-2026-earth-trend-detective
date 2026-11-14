@@ -1,26 +1,26 @@
-# NASA Space Apps Challenge 2026 | Earth System Trend Detective
+# Mountain Water Availability
 
-**Event:** November 14–15, 2026  
-**Challenge:** [Be An Earth System Trend Detective!](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/)  
-**Status:** Pre-event repository setup only; no competition solution has been built.
+Shared project skeleton for the Oslo NASA Space Apps 2026 team, Earth System Trend Detective.
 
-## Background
-The official challenge concerns detecting and explaining trends in Earth-system variables from satellite measurements and/or Earth-system models, including spatial and temporal changes and assessing statistical significance. Read the [official challenge statement](https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/) for the full requirements.
+Preparation has ended. This branch contains project context, module responsibilities and **empty placeholders only**. Teammates will implement the code. There is no runnable application, model, integration or test suite.
 
-## Repository workflow
-This is a private coordination workspace for a team of up to six people. The initial contents are administrative only. Any actual competition software, analysis, data processing, visualizations, designs, and presentation are to be developed during the hackathon.
+The project direction is to investigate mountain-catchment water availability in Norway and Switzerland using river observations and relevant NASA environmental data, with historical context and clearly stated user requirements. Sources, scientific methods and the team's physics model require team decisions and implementation.
 
-- `main`: stable reviewed work / final submission.
-- `develop`: collaboration and integration.
-- `work/data`, `work/analysis`, `work/visualization`, `work/frontend`, `work/backend`, `work/presentation`: reserved workstream branches, with no solution work.
-- During the event, prefer short-lived `feature/<issue>-<topic>` branches and pull requests into `develop`.
+Read the [project brief](docs/project-brief.md), [module responsibilities](docs/architecture.md), [interface planning notes](docs/data-contracts.md) and [contribution workflow](CONTRIBUTING.md). Existing research notes remain reference material, not implemented capabilities.
 
-Read [contribution rules](CONTRIBUTING.md), [setup steps](SETUP.md), and [competition compliance](docs/competition-compliance.md) before work begins.
+## Start a teammate branch
 
-**Independent participant project; unaffiliated with or endorsed by NASA.**
+```text
+git fetch origin
+git switch main
+git pull --ff-only origin main
+git switch -c feature/your-task
+```
 
-## AI and editor preparation
+Preserve uncommitted work first. Use a separate worktree when another person or agent is working in your checkout. PRs target main.
 
-Start with [AGENTS.md](AGENTS.md), [the resource index](docs/research/resource-index.md), and [reading notes](docs/research/reading-notes.md). Claude imports the same instructions through CLAUDE.md.
+The agreed Python/Streamlit entry points and module files are intentionally zero bytes. Do not expect ExecuteProgram.py or streamlit_app.py to launch anything. The tests folder is empty apart from its tracking placeholder. See [SETUP.md](SETUP.md).
 
-VS Code recommendations and an optional Dev Container configure tools only. Supabase MCP exposes documentation; Vercel MCP is configured but disabled. Authentication and local installation still happen on each developer's machine. See [SETUP.md](SETUP.md).
+Earlier generated implementation is preserved on [archive/generated-implementation](https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective/tree/archive/generated-implementation), commit 165e09b. It was never merged into main. It is an archive, not the accepted foundation; do not merge it wholesale.
+
+The team owns subsequent code, methods and data choices. No deployment is included.
