@@ -76,3 +76,26 @@ class TrendSettings:
     @classmethod
     def observed(cls, region: str) -> "TrendSettings":
         return cls.nve() if region == "no" else cls()
+
+@dataclass
+class StationNetworkSettings:
+    """Station x month view: the highest river gauges with a complete daily record over one common period.
+
+    Calendar years (Jan-Dec), so the month columns run January to December. Slopes are expressed
+    relative to the mean over ``baseline``. ``None`` disables the country / water body filter.
+    """
+
+    raw_dir: Path = Path("data/raw/camels_ch")
+    processed_dir: Path = Path("data/processed/trend_stations")
+    n_gauges: int = 100
+    first_year: int = 1981
+    last_year: int = 2020
+    baseline: tuple[int, int] = (1981, 2000)
+    country: str | None = "CH"
+    water_body_type: str | None = "stream"
+    alpha: float = 0.05
+
+    def __post_init__(self) -> None:
+        self.baseline = tuple(int(y) for y in self.baseline)
+        if not self.first_year <= self.baseline[0] <= self.baseline[1] <= self.last_year:
+            raise ValueError(f"Baseline {self.baseline} must lie within {self.first_year}-{self.last_year}")

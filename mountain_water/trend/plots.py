@@ -47,7 +47,7 @@ def _layout(fig: go.Figure, title: str, theme: str = "light", subtitle: str | No
         paper_bgcolor=t["surface"], plot_bgcolor=t["surface"],
         legend=dict(font=dict(color=t["ink2"]), bgcolor="rgba(0,0,0,0)") | kw.pop("legend", {}),
         hoverlabel=dict(font=dict(family=FONT)),
-        margin=dict(l=60, r=30, t=80 if subtitle else 60, b=50),
+        margin=kw.pop("margin", dict(l=60, r=30, t=80 if subtitle else 60, b=50)),
         **kw,
     )
     fig.update_xaxes(**axis)
@@ -508,4 +508,116 @@ def source_trend_scatter(trend_cmp: pd.DataFrame, obs, metric: str, theme: str =
     _layout(fig, f"{info(metric).label}: trend from observations vs GLDAS", theme,
             subtitle=f"Sen's slope over common years; same direction in {share:.0f} % of catchments",
             xaxis_title=f"Observed ({unit})", yaxis_title=f"GLDAS ({unit})")
+    return fig
+
+
+# --------------------------------------------------------------------------- station network (stations.py)
+
+
+def _limit(values: np.ndarray, step: float) -> float:
+    """Symmetric colour limit: 95th percentile of |values|, rounded up to ``step``."""
+    finite = np.abs(values[np.isfinite(values)])
+    return float(np.ceil(np.percentile(finite, 95) / step) * step) if finite.size else step
+
+
+def _colorbar(title: str, x: float, length: float) -> dict:
+    return dict(title=dict(text=title, side="top"), orientation="h", x=x, xanchor="left", y=0, yanchor="top",
+                ypad=40, len=length, thickness=12, outlinewidth=0)
+
+
+def station_month_heatmap(network, significance: bool = True, theme: str = "light") -> go.Figure:
+    """Gauges (highest catchment first) x calendar months, late-summer/annual summaries and half-volume date.
+
+    Volume columns share one colour scale (% of the baseline mean per decade); the half-volume date has its
+    own (days per decade). Red = less water / earlier. ● = Mann-Kendall p < alpha after FDR per column.
+    """
+    from plotly.subplots import make_subplots
+
+    from .stations import LABELS, MONTHS, SUMMARIES, TIMING, change_matrix
+
+    t = THEMES[theme]
+    s = network.meta["settings"]
+    change, p = change_matrix(network), change_matrix(network, "p")
+    sig = change_matrix(network, "significant_fdr").fillna(False).astype(bool)
+    rows = network.stations.set_index("gauge_id").loc[change.index]
+    y = rows["label"].tolist()
+    groups = [(MONTHS, "coloraxis"), (SUMMARIES, "coloraxis"), ([TIMING], "coloraxis2")]
+    short = {"aug_sep_hm3": "Aug–Sep", "annual_hm3": "Annual", "aug_sep_min7": "Aug–Sep<br>7-day low",
+             TIMING: "Half-volume<br>date"}
+    fig = make_subplots(1, 3, shared_yaxes=True, column_widths=[12, 3.6, 1.2], horizontal_spacing=0.012)
+    for col, (metrics, axis) in enumerate(groups, start=1):
+        z = change[metrics].to_numpy(dtype=float)
+        unit = "days" if axis == "coloraxis2" else "%"
+        glacier = np.repeat(rows[["glacier_pct"]].to_numpy(dtype=float), len(metrics), axis=1)
+        custom = np.dstack([p[metrics].to_numpy(dtype=float), glacier])
+        fig.add_trace(go.Heatmap(
+            z=z, x=[short.get(m, LABELS[m]) for m in metrics], y=y,
+            coloraxis=axis, xgap=1, ygap=1, customdata=custom,
+            text=np.where(sig[metrics].to_numpy(), "●", "") if significance else None,
+            texttemplate="%{text}" if significance else None, textfont=dict(color=t["ink"], size=8),
+            hovertemplate="%{y}<br>%{x}: %{z:+.1f} " + unit + " per decade · Mann-Kendall p = %{customdata[0]:.3f}"
+                          "<br>Glacier cover %{customdata[1]:.1f} %<extra></extra>",
+        ), row=1, col=col)
+    vol = change[MONTHS + SUMMARIES].to_numpy(dtype=float)
+    lim_vol, lim_days = _limit(vol, 5), _limit(change[TIMING].to_numpy(dtype=float), 1)
+    b0, b1 = s["baseline"]
+    where = {"CH": "Swiss "}.get(s.get("country"), f"{s['country']} " if s.get("country") else "")
+    sub = (f"{len(change)} {where}river gauges ranked by mean catchment elevation · "
+           f"{s['first_year']}–{s['last_year']} · Sen's slope of annual values")
+    if significance:
+        sub += f"; ● = Mann-Kendall p < {s['alpha']} after FDR per column"
+    n = len(change)
+    _layout(fig, "When is river flow changing across catchments?", theme, subtitle=sub,
+            height=18 * n + 300, margin=dict(l=20, r=20, t=150, b=140),
+            coloraxis=dict(colorscale=_diverging(theme), cmin=-lim_vol, cmax=lim_vol,
+                           colorbar=_colorbar(f"Flow volume change (% of {b0}–{b1} mean per decade)", 0, 0.55)),
+            coloraxis2=dict(colorscale=_diverging(theme), cmin=-lim_days, cmax=lim_days,
+                            colorbar=_colorbar("Half-volume date (days per decade, negative = earlier)", 0.62, 0.38)))
+    fig.update_xaxes(showgrid=False, side="top", tickfont=dict(color=t["ink2"]))
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=10))
+    fig.update_yaxes(showticklabels=False, col=2)
+    fig.update_yaxes(showticklabels=False, col=3)
+    fig.update_yaxes(automargin=True, col=1)
+    return fig
+
+
+def station_year_heatmaps(network, theme: str = "light") -> go.Figure:
+    """Same gauge order, one column per year: Aug–Sep volume anomaly (left) and half-volume date anomaly (right).
+
+    Shows whether slopes come from gradual shifts, a few drought years shared across the network, or an abrupt
+    change at one gauge. Anomalies are relative to each station's baseline mean.
+    """
+    from plotly.subplots import make_subplots
+
+    from .stations import year_anomalies
+
+    s = network.meta["settings"]
+    b0, b1 = s["baseline"]
+    a = year_anomalies(network)
+    labels = network.stations.set_index("gauge_id")["label"]
+    fig = make_subplots(1, 2, shared_yaxes=True, horizontal_spacing=0.02,
+                        subplot_titles=["Aug–Sep volume", "Half-volume date"])
+    for col, (column, axis, unit) in enumerate(
+            [("aug_sep_pct", "coloraxis", "%"), ("half_volume_days", "coloraxis2", "days")], start=1):
+        m = a.pivot(index="gauge_id", columns="year", values=column).reindex(network.gauges)
+        fig.add_trace(go.Heatmap(
+            z=m.to_numpy(dtype=float), x=list(m.columns), y=labels.loc[m.index].tolist(), coloraxis=axis,
+            xgap=1, ygap=1, hovertemplate="%{y}<br>%{x}: %{z:+.1f} " + unit + f" vs {b0}–{b1} mean<extra></extra>",
+        ), row=1, col=col)
+    vol = a["aug_sep_pct"].to_numpy(dtype=float)
+    days = a["half_volume_days"].to_numpy(dtype=float)
+    n = len(network.gauges)
+    _layout(fig, "Gradual shift, shared dry years or one gauge?", theme,
+            subtitle=f"Each cell is one year at one gauge, relative to that gauge's {b0}–{b1} mean · same order as the "
+                     "station × month heatmap",
+            height=18 * n + 300, margin=dict(l=20, r=20, t=150, b=140),
+            coloraxis=dict(colorscale=_diverging(theme), cmin=-_limit(vol, 10), cmax=_limit(vol, 10),
+                           colorbar=_colorbar(f"Aug–Sep volume (% vs {b0}–{b1} mean)", 0, 0.45)),
+            coloraxis2=dict(colorscale=_diverging(theme), cmin=-_limit(days, 5), cmax=_limit(days, 5),
+                            colorbar=_colorbar(f"Half-volume date (days vs {b0}–{b1} mean, negative = earlier)",
+                                               0.53, 0.45)))
+    fig.update_annotations(font=dict(color=THEMES[theme]["ink2"], size=13))
+    fig.update_xaxes(showgrid=False, dtick=5)
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=10))
+    fig.update_yaxes(showticklabels=False, col=2)
     return fig

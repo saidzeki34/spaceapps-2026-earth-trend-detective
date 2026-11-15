@@ -12,6 +12,9 @@ Norway, NVE (observed discharge + seNorge, 1961-latest); needs NVE_API_KEY:
     python -m mountain_water.trend build --source nve     # -> data/processed/trend_no
     python -m mountain_water.trend report --source nve    # -> data/exports/trend_no
 
+Station x month heatmap, the highest CAMELS-CH river gauges with complete records:
+    python -m mountain_water.trend stations [--n-gauges 100] [--period 1981 2020]  # -> data/exports/trend_stations
+
 GLDAS-2.1 Noah (modelled, 2000-now) for either region's selection; needs EARTHDATA_TOKEN:
     python -m mountain_water.trend download --source gldas [--region no] [--probe]
     python -m mountain_water.trend build --source gldas [--region no]   # -> data/processed/trend[_no]_gldas
@@ -25,8 +28,8 @@ import logging
 import os
 from pathlib import Path
 
-from . import camels_ch, gldas, nve, pipeline, plots, sources
-from .settings import TrendSettings
+from . import camels_ch, gldas, nve, pipeline, plots, sources, stations
+from .settings import StationNetworkSettings, TrendSettings
 
 SOURCES = ["camels", "nve", "gldas"]
 
@@ -123,6 +126,27 @@ def _report(args) -> None:
     print(f"Wrote {written} figures and {len(tables)} tables to {out}")
 
 
+def _stations(args) -> None:
+    s = StationNetworkSettings(n_gauges=args.n_gauges, first_year=args.period[0], last_year=args.period[1],
+                               baseline=tuple(args.baseline), country=None if args.all_countries else "CH")
+    net = stations.build(s)
+    out = Path(args.out or "data/exports/" + s.processed_dir.name)
+    out.mkdir(parents=True, exist_ok=True)
+    figures = {"station_month_heatmap": plots.station_month_heatmap(net),
+               "station_year_heatmaps": plots.station_year_heatmaps(net)}
+    for name, fig in figures.items():
+        fig.write_html(out / f"{name}.html", include_plotlyjs="cdn")
+    summary = stations.summary(net)
+    tables = {"station_month_trends": stations.wide_table(net), "station_month_trends_long": net.trends,
+              "station_month_summary": summary, "station_year_anomalies": stations.year_anomalies(net),
+              "station_selection_log": net.selection_log}
+    for name, table in tables.items():
+        table.to_csv(out / f"{name}.csv", index=False, float_format="%.4g")
+    print(net.selection_log.to_string(index=False))
+    print(summary[["label", "n_negative", "n_positive", "median_change_per_decade", "unit"]].to_string(index=False))
+    print(f"Wrote {len(figures)} figures and {len(tables)} tables to {out}")
+
+
 def _download_gldas(args) -> None:
     if args.probe:
         print(gldas.probe())
@@ -204,11 +228,20 @@ def main(argv: list[str] | None = None) -> None:
     rp.add_argument("--gauge", action="append", help="Gauge id for single-catchment figures (repeatable)")
     rp.add_argument("--out", default=None, help="Output folder (default data/exports/<processed folder name>)")
 
+    st = sub.add_parser("stations", help="Station x month heatmap of the highest CAMELS-CH river gauges")
+    st.add_argument("--n-gauges", type=int, default=100, help="Number of gauges, highest mean elevation first")
+    st.add_argument("--period", type=int, nargs=2, default=(1981, 2020), metavar=("FIRST", "LAST"),
+                    help="Calendar years that must be complete (default 1981 2020)")
+    st.add_argument("--baseline", type=int, nargs=2, default=(1981, 2000), metavar=("FIRST", "LAST"),
+                    help="Years whose mean the % changes refer to (default 1981 2000)")
+    st.add_argument("--all-countries", action="store_true", help="Also use CAMELS-CH gauges outside Switzerland")
+    st.add_argument("--out", default=None, help="Output folder (default data/exports/trend_stations)")
+
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s")
     try:
         _run(args)
-    except (RuntimeError, FileNotFoundError, PermissionError) as exc:
+    except (RuntimeError, FileNotFoundError, PermissionError, ValueError) as exc:
         if args.verbose:
             raise
         raise SystemExit(f"Error: {exc}") from None
@@ -241,6 +274,8 @@ def _run(args) -> None:
         print(f"Saved to {s.processed_dir}")
     elif args.command == "report":
         _report(args)
+    elif args.command == "stations":
+        _stations(args)
 
 
 if __name__ == "__main__":
