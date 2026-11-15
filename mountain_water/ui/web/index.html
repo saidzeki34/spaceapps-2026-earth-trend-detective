@@ -1,67 +1,82 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#172b3c">
-  <title>RivaScope — Mountain water analysis</title>
-  <link rel="icon" href="logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RivaScope</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<a class="skip-link" href="#workspace">Skip to results</a>
-<header class="topbar">
-  <div class="brand">RIVASCOPE <span>Mountain water analysis</span></div>
-  <div class="topbar-actions"><span class="local-label">LOCAL WORKSPACE</span><button id="refresh" type="button">Reload saved results</button></div>
-</header>
-<main id="workspace" tabindex="-1">
-  <div class="workspace-head">
-    <div><h1>Historical water availability</h1><p>Switzerland / Norway · Saved observations and model output</p></div>
-    <div id="connection" class="connection" role="status">Loading catalogue…</div>
-  </div>
-  <div id="startup-error" class="notice error" role="alert" hidden></div>
-  <div class="workbench">
-    <aside class="sidebar" aria-label="Analysis controls">
-      <section class="panel selectors">
-        <div class="panel-title"><h2>Selection</h2><span id="dataset-state" class="tag">—</span></div>
-        <div class="field"><label for="dataset">Data source</label><select id="dataset" disabled><option>Loading…</option></select></div>
-        <div class="field"><label for="view">Analysis</label><select id="view" disabled><option>Loading…</option></select></div>
-        <div id="gauge-controls">
-          <div class="field"><label for="gauge-filter">Find a gauge</label><input id="gauge-filter" type="search" placeholder="Name or station ID" autocomplete="off"></div>
-          <div class="field"><label for="gauge">Gauge / catchment</label><select id="gauge" disabled></select></div>
-        </div>
-        <div id="view-options"></div>
-        <dl id="gauge-facts" class="facts"></dl>
-      </section>
-      <section class="panel map-panel" aria-label="Gauge location">
-        <div class="panel-title"><h2>Location</h2><button id="map-reset" type="button" class="text-button">Fit selection</button></div>
-        <div id="map" aria-label="Map showing gauge locations and available river courses"></div>
-        <p id="map-note" class="panel-note">Gauge points and verified river courses. No catchment areas.</p>
-      </section>
-      <details class="panel provenance"><summary>Source and processing record</summary><div id="provenance" class="provenance-body"></div></details>
-    </aside>
-    <section class="results" aria-label="Analysis results">
-      <div class="mode-bar" aria-label="Result mode"><button id="observed-mode" class="active" type="button" aria-pressed="true">Backend results</button><button id="demo-mode" type="button" aria-pressed="false">3D volatility demonstration</button></div>
-      <div id="data-notice" class="notice" hidden></div>
-      <section id="figure-panel" class="panel figure-panel">
-        <div class="figure-heading"><div><div id="figure-kicker" class="eyebrow">HISTORICAL ANALYSIS</div><h2 id="figure-title">Loading saved results</h2><p id="figure-context" class="figure-context"></p></div><button id="expand" type="button" aria-expanded="false">Expand chart</button></div>
-        <div id="figure-status" class="figure-status" role="status">Reading the backend catalogue…</div>
-        <div id="chart" class="chart" aria-label="Selected analysis chart" hidden></div>
-        <div id="figure-notes" class="figure-notes"></div>
-      </section>
-      <section id="table-panel" class="panel table-panel">
-        <div class="panel-title"><h2>Underlying records</h2><div class="table-actions"><span id="row-count" class="muted"></span><button id="download" type="button" disabled>Download CSV</button></div></div>
-        <div id="table-status" class="table-status" role="status">Select an analysis to inspect its saved records.</div>
-        <div id="table-wrap" class="table-wrap" hidden></div>
-        <div id="table-pagination" class="pagination" hidden><button id="previous-page" type="button">Previous</button><span id="page-label"></span><button id="next-page" type="button">Next</button></div>
-      </section>
-      <footer class="scope-note"><span>Risk assessment: not implemented</span><span>Prediction model: not implemented</span><span>Missing observations remain missing.</span></footer>
-    </section>
+
+<!-- Loading screen -->
+<div id="splash" class="splash" role="status" aria-live="polite">
+  <svg class="mark mark-draw" viewBox="0 0 64 64" width="104" height="104" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle class="mark-ring" cx="32" cy="32" r="27" pathLength="1"/>
+    <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43" pathLength="1"/>
+    <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58" pathLength="1"/>
+  </svg>
+  <h1 class="splash-name">RivaScope</h1>
+  <p class="splash-status" id="splash-status">Reading the rivers…</p>
+</div>
+
+<!-- Occupation menu -->
+<main id="occupation" class="pick" hidden>
+  <div class="pick-inner">
+    <p class="brand">
+      <svg class="mark" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle class="mark-ring" cx="32" cy="32" r="27"/>
+        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
+        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
+      </svg>
+      RivaScope
+    </p>
+    <h1>What is your occupation?</h1>
+    <p class="lede">Explore the river records for your field. You can change this at any time. Occupation-specific risk assessment is not available yet.</p>
+    <ol class="choices" id="choices"></ol>
+    <p class="quiet">Rivers in Norway and Switzerland for now. <button class="link" data-action="about">About the data</button></p>
   </div>
 </main>
+
+<!-- The app -->
+<div id="app" hidden>
+  <header class="topbar">
+    <button class="brand link" data-action="europe" title="Back to the Europe map">
+      <svg class="mark" viewBox="0 0 64 64" width="26" height="26" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle class="mark-ring" cx="32" cy="32" r="27"/>
+        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
+        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
+      </svg>
+      RivaScope
+    </button>
+    <nav class="crumbs" id="crumbs" aria-label="Where you are"></nav>
+    <div class="topbar-right">
+      <button class="link quiet" data-action="refresh">Reload saved results</button>
+      <button class="link quiet" data-action="about">About the data</button>
+      <label class="occupation-switch">Occupation
+        <select id="occupation-select"></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <aside class="box side" id="side"></aside>
+    <section class="mapwrap" aria-label="Map"><div id="map"></div></section>
+    <div class="grip" id="grip" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
+    <section class="box results" id="results" aria-live="polite"></section>
+    <div class="box timeline" id="timeline"></div>
+  </div>
+</div>
+
+<dialog id="about" class="about">
+  <h2>About the data</h2>
+  <div id="about-body"></div>
+  <form method="dialog"><button class="button">Close</button></form>
+</dialog>
+
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="/vendor/plotly.min.js"></script>
+<script src="vendor/plotly.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -12,3 +12,6 @@ The latest integration includes the submitted local web UI, its reader for saved
 
 
 On 2026-11-15 the user separately authorized UI completion from the pasted brief. That work replaces fabricated fallback values with saved backend figures/tables, adds industrial presentation and honest availability states, and uses actual river course segments. It does not authorize inventing a scientific model, deploying or restoring the superseded archive. The only synthetic display is an explicitly labelled 3D surface demonstration. See ui-completion.md for actual checks and source-ledger.md for new assistance and geometry records.
+
+
+The subsequent 2026-11-15 user correction restores Claude's submitted UI appearance and workflow while retaining the real-data integration. No industrial redesign is part of that current instruction. The preceding integration/completion descriptions are historical; current scope and checks are in ui-restoration.md.

@@ -1,5 +1,7 @@
 # UI completion ? 2026-11-15
 
+Historical record of PR #14. The user subsequently requested restoration of Claude's original UI appearance and workflow; see [UI restoration](ui-restoration.md). The data integration remains in use.
+
 The user asked to finish the pasted UI brief and inspect what Claude had delivered. The starting checkout was clean main at 67d8d1b. The transcript ended in research/design planning; the disk still contained the older cream/serif UI, filled catchment polygons and imaginary data generators.
 
 ## Preserved and reused

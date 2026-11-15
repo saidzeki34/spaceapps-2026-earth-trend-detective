@@ -1,7 +1,7 @@
 # Instructions for coding assistants
 
-## Current phase: competition has started; UI completion
-On 2026-11-15 the user explicitly confirmed that preparation had ended, then requested integration of the submitted team work. The latest task authorizes finishing the UI against Jonathan's existing trend backend: industrial styling, saved results, additional backend views, and actual river courses.
+## Current phase: competition has started; restore Claude UI and retain data integration
+On 2026-11-15 the user explicitly confirmed that preparation had ended, then requested integration of the submitted team work. The latest user correction rejects the industrial redesign. Restore Claude's submitted UI appearance and map-first workflow from archive/ui-handoff-20261115 (01c421a), while retaining real trend results, backend views and actual river courses. Change presentation only where necessary to wire real data and report availability; do not renovate the layout or styling.
 
 Keep scientific calculations in the existing trend backend. The UI must not fabricate missing observations, evaporation, requirements, risk scores or predictions. Missing saved datasets stay unavailable with their build commands. The only permitted synthetic display is an isolated, explicitly labelled 3D surface demonstration. Risk assessment, prediction and shared coordination remain unfinished. Do not deploy or download observation datasets as a side effect of opening the UI.
 
