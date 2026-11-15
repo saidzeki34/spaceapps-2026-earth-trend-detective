@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RivaScope</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="splash" class="splash" role="status" aria-live="polite">
+  <svg class="mark mark-draw" viewBox="0 0 64 64" width="104" height="104" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle class="mark-ring" cx="32" cy="32" r="27" pathLength="1"/>
+    <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43" pathLength="1"/>
+    <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58" pathLength="1"/>
+  </svg>
+  <h1 class="splash-name">RivaScope</h1>
+  <p class="splash-status" id="splash-status">Reading the rivers…</p>
+</div>
+
+<!-- Occupation menu -->
+<main id="occupation" class="pick" hidden>
+  <div class="pick-inner">
+    <p class="brand">
+      <svg class="mark" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle class="mark-ring" cx="32" cy="32" r="27"/>
+        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
+        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
+      </svg>
+      RivaScope
+    </p>
+    <h1>What is your occupation?</h1>
+    <p class="lede">The risk assessment and its requirements are written for your field. You can change this at any time.</p>
+    <ol class="choices" id="choices"></ol>
+    <p class="quiet">Rivers in Norway and Switzerland for now. <button class="link" data-action="about">About the data</button></p>
+  </div>
+</main>
+
+<!-- The app -->
+<div id="app" hidden>
+  <header class="topbar">
+    <button class="brand link" data-action="europe" title="Back to the Europe map">
+      <svg class="mark" viewBox="0 0 64 64" width="26" height="26" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle class="mark-ring" cx="32" cy="32" r="27"/>
+        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
+        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
+      </svg>
+      RivaScope
+    </button>
+    <nav class="crumbs" id="crumbs" aria-label="Where you are"></nav>
+    <div class="topbar-right">
+      <button class="link quiet" data-action="about">About the data</button>
+      <label class="occupation-switch">Occupation
+        <select id="occupation-select"></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <aside class="box side" id="side"></aside>
+    <section class="mapwrap" aria-label="Map"><div id="map"></div></section>
+    <div class="grip" id="grip" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
+    <section class="box results" id="results" aria-live="polite"></section>
+    <div class="box timeline" id="timeline"></div>
+  </div>
+</div>
+
+<dialog id="about" class="about">
+  <h2>About the data</h2>
+  <div id="about-body"></div>
+  <form method="dialog"><button class="button">Close</button></form>
+</dialog>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

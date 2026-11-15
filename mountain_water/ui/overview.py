@@ -1,43 +1,34 @@
-"""Left box while the user is still choosing: countries, then rivers."""
+"""The rivers of each country and the state of the data, for the map and the left box.
+
+Reading this takes a while the first time, because the data libraries and the trend section's
+tables have to be loaded. The menus do not wait for it: they come from ``controls.catalogue()``.
+"""
 
 from __future__ import annotations
 
-import streamlit as st
+from dataclasses import asdict
 
-from mountain_water.ui import elements, state
-from mountain_water.ui.charts import maps
-
-
-def render_country_box() -> None:
-    """Europe map is showing: offer the countries that can be explored."""
-    st.subheader("Countries", anchor=False)
-    st.caption("Pick a country on the map or here.")
-    for code, name in maps.countries().items():
-        st.button(
-            name,
-            key=f"country_{code}",
-            on_click=state.select_country,
-            args=(code,),
-            width="stretch",
-            icon=":material/public:",
-        )
-    elements.note("Only these countries are available for now. The rest of the map is shaded.")
+from mountain_water.ui import data_source
 
 
-def render_river_box(country: str) -> None:
-    """A country is showing: list its significant rivers."""
-    st.button("Europe", key="back_europe", on_click=state.show_europe, icon=":material/arrow_back:", type="tertiary")
-    st.subheader(maps.countries()[country], anchor=False)
-    rivers = maps.rivers(country)
-    elements.section_label(f"Significant rivers · {len(rivers)}")
-    st.caption("Pick a river on the map or here.")
-    for river in rivers:
-        st.button(
-            river["name"],
-            key=f"river_{river['id']}",
-            on_click=state.select_river,
-            args=(river["id"],),
-            width="stretch",
-            icon=":material/water:",
-        )
-    elements.note("River lines and names come from Natural Earth and are simplified for display.")
+def rivers() -> dict:
+    """Every country that can be explored with its rivers, and what data is connected."""
+    everything = data_source.rivers()
+    return {
+        "countries": [
+            {"code": code, "name": name, "rivers": [asdict(r) for r in everything if r.country == code]}
+            for code, name in data_source.countries().items()
+        ],
+        "data": data_source.status(),
+    }
+
+
+def river_summary(data: data_source.RiverData) -> dict:
+    """Facts about the open river, including the years its timeline covers."""
+    return {
+        **asdict(data.river),
+        "source": data.source,
+        "first_year": data.years[0],
+        "last_year": data.years[-1],
+        "prediction_year": data.prediction_year,
+    }
