@@ -2,7 +2,7 @@
 
 Shared project for the Oslo NASA Space Apps 2026 team, Earth System Trend Detective.
 
-Preparation has ended. RivaScope presents Jonathan's saved Swiss/Norwegian trend results, GLDAS model comparisons and station-network views through a local web interface. It uses the backend's figures and tables directly. Missing saved outputs show their status and build commands; no observations or forecasts are invented. See the [UI completion handoff](docs/ui-completion.md) and [preserved submissions](docs/submitted-handoffs.md).
+Preparation has ended. RivaScope retains Claude's submitted interface and presents Jonathan's saved Swiss/Norwegian trend results, GLDAS model comparisons and station-network views through a local web interface. It uses the backend's figures and tables directly. Missing saved outputs show their status and build commands; no observations or forecasts are invented. See the [UI restoration handoff](docs/ui-restoration.md) and [preserved submissions](docs/submitted-handoffs.md).
 
 The project direction is to investigate mountain-catchment water availability in Norway and Switzerland using river observations and relevant NASA environmental data, with historical context and clearly stated user requirements. Sources, scientific methods and the team's physics model require team decisions and implementation.
 

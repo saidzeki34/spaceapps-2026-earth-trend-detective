@@ -2,7 +2,7 @@
 
 The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (later), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
 
-The UI is a standard-library web server with HTML/CSS/JavaScript, not Streamlit. Its backend.py adapter reads saved trend outputs and calls trend.plots and table functions directly; river_geometry.py supplies cached verified course segments. See [the UI guide](../mountain_water/ui/README.md) for the current file map and [UI completion](ui-completion.md) for implementation boundaries. No scientific calculations are duplicated in the UI. Risk, prediction and shared coordination remain unfinished.
+The UI is a standard-library web server with HTML/CSS/JavaScript, not Streamlit. Its backend.py adapter reads saved trend outputs and calls trend.plots and table functions directly; river_geometry.py supplies cached verified course segments. See [the UI guide](../mountain_water/ui/README.md) for the current file map and [UI restoration](ui-restoration.md) for implementation boundaries. No scientific calculations are duplicated in the UI. Risk, prediction and shared coordination remain unfinished.
 
 The tables below preserve the original skeleton responsibilities, not a claim that every planned file exists or is complete.
 
