@@ -1,6 +1,6 @@
 # trend: CAMELS-CH water availability trends
 
-This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. The same analysis runs on **NASA GLDAS-2.1** model output for the same catchments (see [GLDAS](#gldas-21-noah-nasa) below), and the two sources can be compared. Switzerland only for now. No forecasts yet.
+This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. The same analysis runs on **Norwegian NVE** observations (see [Norway](#norway-nve--senorge)) and on **NASA GLDAS-2.1** model output for either country's catchments (see [GLDAS](#gldas-21-noah-nasa)), so observations and the NASA model can be compared. No forecasts yet.
 
 ## Run
 
@@ -10,6 +10,7 @@ python -m mountain_water.trend download        # Zenodo -> data/raw/camels_ch/v<
 python -m mountain_water.trend inspect         # list files, columns and units of the download
 python -m mountain_water.trend build           # -> data/processed/trend/*.parquet
 python -m mountain_water.trend report --gauge 2268 --gauge 2327   # -> data/exports/trend/*.html + *.csv
+python -m mountain_water.trend stations        # station x month heatmap, CH + NO -> data/exports/trend_stations
 python -m pytest                               # synthetic CAMELS-CH-shaped fixture
 ```
 
@@ -39,13 +40,52 @@ plots.regime_by_window(r, r.gauges[0])     # plotly Figure
 
 The 10-year windows start at the first valid hydrological year, 1982 (Oct 1981–Sep 1982), because the record starts in January 1981. That gives 1982–1991, 1992–2001, 2002–2011 and 2012–2020. A final window shorter than 8 years is dropped. Use `--hydro-year-start 1` to get calendar-year decades (1981–1990, ...).
 
+## Norway (NVE + seNorge)
+
+```text
+export NVE_API_KEY=<key>                               # free: https://hydapi.nve.no/Users
+python -m mountain_water.trend inspect --source nve    # real field names of the three services (check first)
+python -m mountain_water.trend -v download --source nve
+python -m mountain_water.trend build --source nve      # -> data/processed/trend_no
+python -m mountain_water.trend report --source nve --gauge <station id, e.g. 2.11.0>
+# NASA comparison for the same Norwegian catchments (needs EARTHDATA_TOKEN):
+python -m mountain_water.trend -v download --source gldas --region no
+python -m mountain_water.trend build --source gldas --region no      # -> data/processed/trend_no_gldas
+python -m mountain_water.trend report --source gldas --region no --gauge <id>
+```
+
+| Data | Source | Notes |
+| --- | --- | --- |
+| Daily discharge | NVE HydAPI, parameter 1001, resolution 1440 | m³/s, dated in Norwegian local time. The quality code is kept. Specific discharge = Q × 86.4 / area |
+| Station metadata | HydAPI `/Stations` | `drainageBasinArea`, `heightHypso50` (median elevation), `percentGlacier`, `catchmentRegTypeName` plus the reservoir fields, and the daily-discharge period from `seriesList` (field names verified 2026-11-15) |
+| Catchment outlines | NVE map service `HydrologiskeData3`, layer 38 "Totalnedbørfelt til målestasjon" (EPSG:25833) | Matched to stations on (watercourse area, station number) from `stasjonnr` or `compoundkey12`, whichever matches more stations. Version suffix and zero padding are ignored (`2.11`, `2.11.0` and `002.00011.000` are the same station) |
+| Precipitation, temperature, SWE | seNorge 1 km grids via NVE GridTimeSeries point series (`GridTimeSeries/{x}/{y}/{start}/{end}/{theme}.json`), themes `rr`, `tm`, `swe` | Each catchment is sampled on a regular grid of 1 km cell centres (about 20 points; every cell in small catchments) and the points are averaged. One request per point and theme covers the whole period (about 0.6 s each). No key needed. The polygon endpoint (`AggregationTimeSeries/ByGeoJson`) returned HTTP 500 for every request on 2026-11-15, including NVE's own example |
+
+**Filter** (`TrendSettings.nve()`): median catchment elevation ≥ 800 m, area ≤ 500 km², unregulated, ≥ 30 valid years. Regulation follows NVE's category `catchmentRegTypeName`: only categories starting with "uregulert" are kept. Anything else containing "regulert" is excluded, including "regulert m/magasinregulering", "… og overføringer" and "regulert m/magasin og uregulert restfelt". Only stations without a category fall back to the numeric fields (any reservoir count, area or volume > 0 excludes). The category takes precedence because a regulated station can have every numeric regulation field at 0 (e.g. 1.200.0). The download step applies the same metadata filter first, so only candidate stations are fetched.
+
+**Period:** October 1960 to the latest complete hydrological year. Windows: 1961–1970, …, 2011–2020, plus 2021–latest (kept because it has ≥ 5 years). The overlap with GLDAS starts in 2001.
+
+**Checked with `inspect --source nve` on 2026-11-15:**
+- HydAPI: 1,904 stations; all station fields above are present.
+- Regulation categories: 335 "uregulert", 398 "regulert m/magasinregulering", 335 "… og overføringer", 139 "… og uregulert restfelt", and 697 with no category (numeric fallback).
+- Outline layer: `stasjonnr` is written like `76.5.0`.
+- seNorge: `rr`, `tm` (°C) and `swe` (mm) are daily from 1957.
+
+**Live run on 2026-11-15:** the whole chain ran on real data.
+- Metadata pre-filter: 96 candidate stations; discharge for all 96 downloaded in under a minute; all 96 outlines matched.
+- seNorge: 1,125 points × 3 themes (3,375 requests).
+- `build --source nve`: 628 stations with daily discharge → 283 at median elevation ≥ 800 m → 167 at ≤ 500 km² → 118 unregulated → **84 catchments** with ≥ 30 valid years. Windows 1961–1970 … 2011–2020 and 2021–2026.
+- `build --source gldas --region no`: all 84 catchments, windows 2001–2010, 2011–2020, 2021–2025.
+
+Good gauges to start with: 2.13.0 (Sjoa at Nedre Sjodalsvatn, median 1542 m) and 88.4.0 (Lovatn, 33 % glacier). Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
+
 ## GLDAS-2.1 Noah (NASA)
 
 GLDAS is NASA's Global Land Data Assimilation System. This pipeline uses **GLDAS_NOAH025_3H 2.1**: the Noah land-surface model on a 0.25° grid, 3-hourly, from 2000 to about 3 months ago. GLDAS is a model, not a measurement. It has no gauges, and its runoff isn't routed down rivers.
 
 ```text
 export EARTHDATA_TOKEN=<token>     # free Earthdata account: urs.earthdata.nasa.gov -> Generate Token (valid 60 days)
-python -m mountain_water.trend build                             # CAMELS-CH first: provides the catchment selection
+python -m mountain_water.trend build                             # CAMELS-CH first (or build --source nve for Norway)
 python -m mountain_water.trend download --source gldas --probe   # one tiny request: checks the token and response format
 python -m mountain_water.trend download --source gldas           # ~2,200 cached requests into data/raw/gldas; rerun to resume
 python -m mountain_water.trend build --source gldas              # -> data/processed/trend_gldas
@@ -93,6 +133,64 @@ Data notes:
 - Some catchments still have hydropower plants (`hp_count` > 0), and 2347 is named a compensation basin. Check them before interpreting their trends.
 
 The automated tests (`python -m pytest`) use a small synthetic dataset with the same layout (`tests/trend/conftest.py`), so they run without the download.
+
+## Station × month heatmap
+
+`python -m mountain_water.trend stations` (`stations.py`) shows three things in one figure: **when** in the year flow is changing, **whether the same pattern appears across catchments**, and **whether late-summer losses are larger than the change in annual supply**. It covers Switzerland and Norway in separate panels with the same columns. It has its own selections and uses calendar years, separate from `build`:
+
+- **Switzerland.** CAMELS-CH gauges in Switzerland (`country` CH) on rivers (`water_body_type` stream). Each needs a valid, non-negative discharge on every day of 1981–2020 and some flow in every year. They are ranked by mean catchment elevation (`elev_mean`), and the highest 100 are kept. There is **no reservoir filter**, and some catchments are nested.
+- **Norway.** The 84 gauges of the NVE mountain selection from the last `build --source nve` (median elevation ≥ 800 m, ≤ 500 km², unregulated), ranked by median catchment elevation. Discharge comes from the cached HydAPI download in `data/raw/nve`.
+- **Complete years.** A calendar year counts only if every day has a valid discharge. No gaps are filled, and the quality code is not filtered. A slope is estimated only for gauges with **≥ 30 complete years, ≥ 10 of them in 1981–2000**. The rest stay in the figure as grey rows and in the tables with empty slopes.
+- **Per gauge and complete year:**
+  - monthly volume (hm³);
+  - August–September volume;
+  - annual volume;
+  - the lowest 7-day mean flow, counting only 7-day windows that lie entirely within August–September;
+  - the half-volume date (the day of the year by which half the year's volume has passed).
+
+  29 February is left out, so every year has 365 days.
+- **Per gauge and value:**
+  - Sen's slope per decade, as % of the gauge's 1981–2000 mean (the half-volume date in days, negative = earlier);
+  - the same slope in **mm of runoff per decade** over the catchment area (mm/d for the 7-day low), because a large % change in a low-flow month can be little water;
+  - the Mann-Kendall p-value with trend-free pre-whitening;
+  - the Benjamini-Hochberg FDR per column, over all gauges with slopes.
+
+  The colour shows the effect size. ● marks p < 0.05 after FDR, ▲ glacier cover > 0, ■ a recorded reservoir, hydropower plant or regulation.
+- **Year anomalies** (`station_year_heatmaps`). Same gauge order, one column per year: August–September volume anomaly and half-volume date anomaly, relative to each gauge's 1981–2000 mean. Grey cells are years without a complete record. It shows whether a slope comes from a gradual shift, a few shared dry years, or an abrupt change at one gauge.
+- **Driver scatters** (`driver_change_scatter`). One point per gauge with slopes, one panel per country, coloured by glacier cover. Both values are Sen's slopes fitted over the years where both exist, so differences in record length don't drive the comparison. Two pairs:
+  - **Half-volume date against snow-free date.** The snow-free date is the first day after the January–August SWE peak with SWE ≤ 5 % of the peak, from CAMELS-CH or seNorge SWE. Snowpacks with a peak below 10 mm get no date.
+  - **Aug–Sep 7-day low against July–September precipitation.** Both are in % of their mean over the fitted years.
+
+  Pairs need ≥ 15 common years. CAMELS-CH SWE starts in 1998, so the Swiss snow comparison covers about 1999–2020.
+
+  Both SWE series drop to ~0 at the start of September; at gauge 2009, for example, SWE goes from 43 mm to 0 between 1 and 2 September 2010. That is a reset, not melt, so only melt-out before 1 September counts. Years with snow left on 31 August get no date, which leaves out most strongly glacierized catchments.
+
+Options: `--region all|ch|no` (default `all`; without an NVE build it falls back to Switzerland), `--n-gauges 100 --period 1981 2020 --baseline 1981 2000 --all-countries`. Outputs in `data/exports/trend_stations`:
+- `station_month_heatmap.html`, `station_year_heatmaps.html` and two `driver_*.html` files;
+- `station_month_trends.csv` (wide, one row per gauge, % and mm columns, record length) and `station_month_trends_long.csv` (with p-values);
+- `station_month_summary.csv` and `station_month_summary_by_infrastructure.csv` (per country and column: counts of negative and positive slopes, and the medians);
+- `station_year_anomalies.csv`;
+- `station_driver_changes.csv`;
+- `station_selection_log.csv`.
+
+**Run on 2026-11-15** (CAMELS-CH v0.9 and the cached NVE download).
+- **Switzerland:** 331 catchments → 229 in Switzerland → 196 rivers → 139 complete for 1981–2020 → the 100 highest kept. All 100 have slopes. The lowest has a mean elevation of 986 m. The Swiss selection and values match the exploratory script `plot_station_trends.py` this view was adapted from. The exceptions are February, annual volume and the half-volume date, which differ by at most 1.4 percentage points, 0.2 percentage points and 0.7 days because of leap-day handling.
+- **Norway:** 84 gauges, 74 with slopes.
+- **Comparison with an exploratory figure made outside the repository:** it covers the same 184 gauges in the same order, and its slopes are identical wherever the complete-year counts agree. That is all 100 Swiss gauges and 48 of the Norwegian ones. For the other Norwegian gauges its NVE data had fewer complete years than our cached download (e.g. 156.19.0: 19 against 26), so it gave slopes for 73 Norwegian gauges instead of 74.
+
+| Value | Switzerland: negative slopes (of 100), median per decade | Norway: positive slopes (of 74), median per decade |
+| --- | --- | --- |
+| April volume | 50, +0.1 % (−0.0 mm) | 70, +14.6 % (+5.5 mm) |
+| July volume | 97, −7.1 % (−8.8 mm) | 25, −1.5 % (−4.2 mm) |
+| September volume | 93, −5.3 % (−4.5 mm) | 59, +5.4 % (+6.2 mm) |
+| Aug–Sep volume | 87, −3.9 % (−6.3 mm) | 52, +3.9 % (+9.4 mm) |
+| Annual volume | 87, −2.4 % (−22.0 mm) | 56, +2.2 % (+27.0 mm) |
+| Half-volume date | 74 earlier, −1.1 days | 36 earlier, 28 later, 0.0 days |
+
+- **Unflagged Swiss gauges.** The 42 Swiss gauges without a recorded reservoir or hydropower plant show the same summer pattern: July volume falls at 41, September at 38.
+- **Driver scatters, Spearman r across gauges.** Half-volume date against snow-free date: −0.10 for Switzerland (70 gauges, ~1999–2020) and −0.33 for Norway (61 gauges). Aug–Sep 7-day low against July–September precipitation: −0.03 for Switzerland (100 gauges) and +0.22 for Norway (74 gauges).
+
+These are descriptive slopes for two differently selected networks over one period. They are not regional estimates and not attribution. Still open: a second common period, uncertainty intervals that allow for year-to-year dependence, the 10 %/90 % delivery dates, and a MODIS snow-cover check of the snow timing after 2000.
 
 ## Interpretation limits
 

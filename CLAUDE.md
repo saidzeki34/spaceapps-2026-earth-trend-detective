@@ -1,3 +1,3 @@
 @AGENTS.md
 
-Preparation has ended. Main combines the team's UI and trend backend; their data connection and later sections remain unfinished. Follow AGENTS.md and docs/team-integration.md. Preserve ongoing edits and use a separate worktree for simultaneous writers.
+Preparation has ended. Main combines the submitted local web UI and trend backend. The UI reads saved Swiss results; Norway/station views and later modules retain their documented limits. Follow AGENTS.md and docs/submitted-handoffs.md. Backend feature work uses work/backend; UI and integration work uses main. Preserve ongoing edits and use separate worktrees for simultaneous writers.

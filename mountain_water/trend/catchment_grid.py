@@ -1,8 +1,8 @@
-"""Map CAMELS-CH catchment outlines onto a regular lat/lon grid (e.g. the GLDAS 0.25° grid).
+"""Map catchment outlines onto a regular lat/lon grid (e.g. the GLDAS 0.25° grid).
 
 Each catchment gets the grid cells it overlaps and a weight per cell = overlapping area /
-catchment area. Areas are computed in the shapefile's projected CRS (CH1903+/LV95 for CAMELS-CH),
-so weights are true area fractions.
+catchment area. Areas are computed in the outlines' projected CRS (CH1903+/LV95 for CAMELS-CH,
+ETRS89/UTM 33N for NVE), so weights are true area fractions.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ import pandas as pd
 CATCHMENT_SHAPEFILE = "catchment_delineations/CAMELS_CH_catchments.shp"
 
 
-def _read_catchments(shp: Path, gauge_ids: list[str] | None) -> tuple[dict, str]:
+def read_shapefile(shp: Path, gauge_ids: list[str] | None = None) -> tuple[dict, str]:
+    """CAMELS-CH style shapefile with a ``gauge_id`` field -> ({gauge_id: polygon}, crs)."""
     import shapefile  # pyshp
     from shapely.geometry import shape
     from shapely.validation import make_valid
@@ -42,8 +43,14 @@ def cell_weights(
     resolution: float = 0.25,
     origin: float = 0.0,
 ) -> pd.DataFrame:
+    polygons, crs = read_shapefile(shp, gauge_ids)
+    return polygon_cell_weights(polygons, crs, resolution, origin)
+
+
+def polygon_cell_weights(polygons: dict, crs_wkt: str, resolution: float = 0.25, origin: float = 0.0) -> pd.DataFrame:
     """Rows: gauge_id, cell_lat, cell_lon (cell centres), weight, catchment_area_km2.
 
+    ``polygons`` maps gauge ids to shapely geometries in the projected CRS ``crs_wkt``.
     Cells are ``resolution``-degree boxes whose edges sit on multiples of ``resolution`` offset by
     ``origin`` (GLDAS 0.25°: edges at ..., 46.0, 46.25, ...; centres at 46.125, 46.375, ...).
     """
@@ -51,7 +58,6 @@ def cell_weights(
     from pyproj import CRS, Transformer
     from shapely.geometry import box
 
-    polygons, crs_wkt = _read_catchments(shp, gauge_ids)
     to_wgs = Transformer.from_crs(CRS.from_user_input(crs_wkt), "EPSG:4326", always_xy=True)
     to_proj = Transformer.from_crs("EPSG:4326", CRS.from_user_input(crs_wkt), always_xy=True)
 
