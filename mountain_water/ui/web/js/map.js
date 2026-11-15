@@ -1,10 +1,10 @@
-// Claude's satellite map navigation, with saved gauges and verified river segments.
+// The satellite map: Europe with the two countries lit, then the saved gauges and river segments.
 // Country boundaries remain context; they are never presented as river courses.
 
 const EUROPE = [[43.0, -4.0], [71.6, 30.0]];
 const IMAGERY = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const LABELS = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
-const COLOR = { border: "#eaf4fb", river: "#7fc8f5", selected: "#ffd166" };
+const COLOR = { border: "#ffffff", river: "#ffffff", selected: "#ff4f00" };
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const key = (country, id) => `${String(country).toUpperCase()}:${String(id)}`;
@@ -38,7 +38,7 @@ export function createMap(element, geodata, handlers) {
     for (const polygon of country.polygons) holes.push(polygon[0]);
   }
   L.polygon([[[-89, -360], [-89, 360], [89, 360], [89, -360]], ...holes],
-    { pane: "shade", stroke: false, fillColor: "#05090d", fillOpacity: 0.62, interactive: false }).addTo(map);
+    { pane: "shade", stroke: false, fillColor: "#000000", fillOpacity: 0.7, interactive: false }).addTo(map);
 
   let shown = { country: null, river: null };
   let rivers = {}; // country code -> saved gauge metadata, with raw gauge IDs
@@ -66,6 +66,7 @@ export function createMap(element, geodata, handlers) {
   back.onAdd = () => {
     const el = L.DomUtil.create("div", "map-back");
     el.textContent = "← Europe";
+    el.setAttribute("role", "button");
     L.DomEvent.disableClickPropagation(el);
     L.DomEvent.on(el, "click", () => handlers.europe());
     return el;
@@ -76,8 +77,7 @@ export function createMap(element, geodata, handlers) {
   }
 
   function tip(river) {
-    const detail = [river.place, courseFor(river) ? "Mapped river segments" : "Gauge location · river course unavailable"]
-      .filter(Boolean).map(esc).join(" · ");
+    const detail = [river.place, river.id].filter(Boolean).map(esc).join(" · ");
     return { html: `${esc(river.name || river.label || river.id)}<small>${detail}</small>`,
       options: { sticky: true, direction: "top", offset: [0, -8], className: "map-tip" } };
   }
@@ -91,23 +91,24 @@ export function createMap(element, geodata, handlers) {
       const hint = tip(river), course = courseFor(river), at = position(river);
       if (course) {
         const core = L.geoJSON(course, { pane: "rivers", style: { color: selected ? COLOR.selected : COLOR.river,
-          weight: selected ? 3.4 : 2.2, opacity: dim ? 0.55 : 1, interactive: false,
-          lineCap: "round", lineJoin: "round" } });
+          weight: selected ? 3.2 : 1.6, opacity: dim ? 0.5 : 1, interactive: false,
+          lineCap: "butt", lineJoin: "miter" } });
         const hit = L.geoJSON(course, { pane: "rivers", style: { color: "#fff", weight: 18, opacity: 0 } });
         hit.bindTooltip(hint.html, hint.options);
-        hit.on("mouseover", () => { if (!selected) core.setStyle({ weight: 3.6, opacity: 1 }); });
-        hit.on("mouseout", () => { if (!selected) core.setStyle({ weight: 2.2, opacity: dim ? 0.55 : 1 }); });
+        hit.on("mouseover", () => { if (!selected) core.setStyle({ weight: 3.2, opacity: 1 }); });
+        hit.on("mouseout", () => { if (!selected) core.setStyle({ weight: 1.6, opacity: dim ? 0.5 : 1 }); });
         hit.on("click", pick);
         riverLayer.addLayer(core).addLayer(hit);
       }
       if (at) {
-        const point = L.circleMarker(at, { pane: "points", radius: selected ? 6 : 4.2,
-          color: "#1d2220", weight: 1.2, fillColor: selected ? COLOR.selected : "#fff", fillOpacity: dim ? 0.6 : 1 });
+        // Gauges are square marks, as on a survey map.
+        const point = L.marker(at, { pane: "points", icon: L.divIcon({ className: "", iconSize: [9, 9], iconAnchor: [5, 5],
+          html: `<div class="gauge${selected ? " sel" : dim ? " dim" : ""}"></div>` }) });
         point.bindTooltip(hint.html, hint.options);
         point.on("click", pick);
         riverLayer.addLayer(point);
         if (selected) {
-          riverLayer.addLayer(L.tooltip({ permanent: true, direction: "top", className: "map-tip selected", offset: [0, -8] })
+          riverLayer.addLayer(L.tooltip({ permanent: true, direction: "top", className: "map-tip selected", offset: [0, -10] })
             .setLatLng(at).setContent(esc(river.name || river.label || river.id)));
         }
       }

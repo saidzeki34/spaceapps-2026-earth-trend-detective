@@ -12,67 +12,61 @@
 
 <!-- Loading screen -->
 <div id="splash" class="splash" role="status" aria-live="polite">
-  <svg class="mark mark-draw" viewBox="0 0 64 64" width="104" height="104" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <circle class="mark-ring" cx="32" cy="32" r="27" pathLength="1"/>
-    <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43" pathLength="1"/>
-    <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58" pathLength="1"/>
+  <svg class="mark" viewBox="0 0 64 64" width="44" height="44" fill="none" aria-hidden="true">
+    <rect x="6" y="6" width="52" height="52"/>
+    <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
+    <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
   </svg>
-  <h1 class="splash-name">RivaScope</h1>
-  <p class="splash-status" id="splash-status">Reading the rivers…</p>
+  <div class="splash-word">RivaScope</div>
+  <div class="splash-foot">
+    <div class="splash-bar"><i></i></div>
+    <p><span>Mountain river water availability</span><span id="splash-status">Loading saved results</span></p>
+  </div>
 </div>
 
-<!-- Occupation menu -->
+<!-- Occupation menu: shown after the loading screen until a choice has been saved -->
 <main id="occupation" class="pick" hidden>
-  <div class="pick-inner">
-    <p class="brand">
-      <svg class="mark" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle class="mark-ring" cx="32" cy="32" r="27"/>
-        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
-        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
-      </svg>
-      RivaScope
-    </p>
-    <h1>What is your occupation?</h1>
-    <p class="lede">Explore the river records for your field. You can change this at any time. Occupation-specific risk assessment is not available yet.</p>
-    <ol class="choices" id="choices"></ol>
-    <p class="quiet">Rivers in Norway and Switzerland for now. <button class="link" data-action="about">About the data</button></p>
-  </div>
+  <header>
+    <span class="brand">
+      <svg class="mark" viewBox="0 0 64 64" width="20" height="20" fill="none" aria-hidden="true">
+        <rect x="6" y="6" width="52" height="52"/>
+        <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
+        <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
+      </svg>RivaScope</span>
+    <span>Occupation</span>
+  </header>
+  <ol id="choices"></ol>
+  <footer><span id="pick-data"></span><button data-action="about">Data</button></footer>
 </main>
 
 <!-- The app -->
 <div id="app" hidden>
-  <header class="topbar">
-    <button class="brand link" data-action="europe" title="Back to the Europe map">
-      <svg class="mark" viewBox="0 0 64 64" width="26" height="26" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle class="mark-ring" cx="32" cy="32" r="27"/>
-        <path class="mark-peak" d="M11 43 L25 20 L32 30 L38 23 L53 43"/>
-        <path class="mark-river" d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58"/>
-      </svg>
-      RivaScope
-    </button>
-    <nav class="crumbs" id="crumbs" aria-label="Where you are"></nav>
-    <div class="topbar-right">
-      <button class="link quiet" data-action="refresh">Reload saved results</button>
-      <button class="link quiet" data-action="about">About the data</button>
-      <label class="occupation-switch">Occupation
-        <select id="occupation-select"></select>
-      </label>
+  <header class="top">
+    <button class="brand" data-action="europe" title="Europe">
+      <svg class="mark" viewBox="0 0 64 64" width="20" height="20" fill="none" aria-hidden="true">
+        <rect x="6" y="6" width="52" height="52"/>
+        <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
+        <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
+      </svg>RivaScope</button>
+    <nav class="crumbs" id="crumbs" aria-label="Location"></nav>
+    <div class="top-right">
+      <label>Occupation<select id="occupation-select"></select></label>
+      <button data-action="about">Data</button>
     </div>
   </header>
 
   <div class="layout" id="layout">
-    <aside class="box side" id="side"></aside>
+    <aside class="side" id="side"></aside>
     <section class="mapwrap" aria-label="Map"><div id="map"></div></section>
-    <div class="grip" id="grip" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
-    <section class="box results" id="results" aria-live="polite"></section>
-    <div class="box timeline" id="timeline"></div>
+    <div class="grip" id="grip" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+    <section class="res" id="results" aria-live="polite"></section>
+    <div class="time" id="timeline"></div>
   </div>
 </div>
 
 <dialog id="about" class="about">
-  <h2>About the data</h2>
+  <header><h2>Data</h2><form method="dialog"><button>Close</button></form></header>
   <div id="about-body"></div>
-  <form method="dialog"><button class="button">Close</button></form>
 </dialog>
 
 <script src="vendor/leaflet/leaflet.js"></script>
