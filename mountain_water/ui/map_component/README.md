@@ -22,8 +22,8 @@ is its Python side.
 | Country outlines and river lines | Natural Earth 1:10m, public domain (naturalearthdata.com), files `ne_10m_admin_0_countries`, `ne_10m_rivers_lake_centerlines`, `ne_10m_rivers_europe` | Stored in `frontend/geodata.json`, produced by `build_geodata.py`. |
 | Map library | Leaflet 1.9.4 (BSD-2-Clause), loaded from unpkg.com | Needs an internet connection, as do the tiles. |
 
-These sources still need an entry in `docs/source-ledger.md`. That file is
-outside the UI section and was left untouched.
+These existing source notes are recorded in `docs/source-ledger.md` by the
+team integration. The licence and geometry review limits below still apply.
 
 ## Limits of the geometry
 

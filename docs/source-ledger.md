@@ -1,6 +1,6 @@
 # Source and licence ledger
 
-This main-branch skeleton contains no application data, runtime dependencies, scientific methods or computed results.
+The original main skeleton contained no application data or runtime dependencies. The team integration now includes the source code and display assets recorded below. Inherited source records are preserved; merging them is not independent verification of their scientific or licence claims.
 
 | Material | Use | Record |
 | --- | --- | --- |
@@ -12,6 +12,12 @@ This main-branch skeleton contains no application data, runtime dependencies, sc
 | NASA GLDAS-2.1 Noah 0.25° 3-hourly (GLDAS_NOAH025_3H 2.1; Beaudoing & Rodell, NASA GES DISC), doi:10.5067/E7TYRXPJKWOQ, via the Giovanni Time Series API | Modelled runoff, snowmelt, precipitation, snowfall, air temperature, evapotranspiration and SWE for the CAMELS-CH mountain catchments (mountain_water/trend/gldas.py) | Integrated 2026-11-15. Requires an Earthdata Login token; API access and response format verified with a probe request on 2026-11-15; full download pending; data stays out of Git |
 | Python libraries: numpy, pandas, pyarrow, scipy, pymannkendall, plotly, requests, pyshp, pyproj, shapely, pytest | Parsing, statistics, trend tests and figures | Declared in pyproject.toml, 2026-11-15 |
 | Anthropic Claude Code assistance | Backend plan and implementation of mountain_water/trend (CAMELS-CH and GLDAS), tests/trend and pyproject.toml | 2026-11-15; team reviews methods and results |
+| Local RivaScope UI, identified by the user as Claude's work | Existing screens, charts, sample previews, logo and map component in mountain_water/ui; no backend data connected | Saved-file checkpoint 675913d on archive/ui-snapshot-20261115, 2026-11-15; exact assistant/model version not verified |
+| Streamlit | Existing UI runtime; optional ui dependency | Integration checked with installed 1.67.0; declared as streamlit>=1.67 |
+| Natural Earth display geometry | Country outlines and simplified river lines for Norway and Switzerland, saved in ui/map_component/frontend/geodata.json; transformation script build_geodata.py | UI author documents 1:10m admin_0_countries, rivers_lake_centerlines and rivers_europe, public domain. Original retrieval date/version not recorded; preserved asset, not newly downloaded. Display geometry is not a catchment or observation dataset; see the map README for transformations and limits. |
+| Esri World Imagery and World Boundaries and Places | Browser-loaded map imagery and labels | Existing UI includes attribution; no tile data committed by integration. Terms review remains pending as documented by the UI author. |
+| Leaflet | Map interaction in frontend/index.html, loaded from unpkg.com | UI author records 1.9.4 / BSD-2-Clause; runtime uses an external CDN. No new vendoring by integration. |
+| OpenAI Codex integration assistance | Branch inventory, UI preservation checkpoint, merge conflict resolution retaining both decision logs, setup/dependency documentation and local checks | 2026-11-15; no new scientific method, data download or deployment; live UI working files left untouched |
 
 Preparation was assisted by ChatGPT/Codex on 2026-11-13. The archive preserves the actual earlier implementation work; this skeleton does not conceal it or claim those capabilities.
 

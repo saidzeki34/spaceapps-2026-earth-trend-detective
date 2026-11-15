@@ -2,7 +2,7 @@
 
 The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (later), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
 
-All Python files remain zero-byte placeholders. The tables describe future responsibilities, not implemented features, algorithms or selected scientific methods.
+The tables below record responsibilities agreed during the skeleton delivery. The team has since implemented the UI and trend backend; see [team-integration.md](team-integration.md), the [trend guide](../mountain_water/trend/README.md) and the [map guide](../mountain_water/ui/map_component/README.md) for their actual state. The UI/backend connection, risk assessment, prediction and shared coordination remain unfinished. A planned responsibility is not a claim that its implementation is complete.
 
 ## Folder overview
 
@@ -26,7 +26,7 @@ tests/
 docs/
 ```
 
-Each Python package also has an empty __init__.py. Root data/, scripts/ and tests/ retain empty tracking placeholders. Entry points remain empty.
+The root entry points remain empty. Launch the existing UI via mountain_water/ui/app.py and the backend via python -m mountain_water.trend. The backend's tests live in tests/trend/; shared, risk and prediction placeholders remain empty.
 
 ## ui — first phase
 

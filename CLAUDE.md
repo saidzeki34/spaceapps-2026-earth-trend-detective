@@ -1,3 +1,3 @@
 @AGENTS.md
 
-Preparation has ended. The current delivery is documentation and empty placeholders only; teammates will implement the application. Follow the latest scope and main-based branch workflow in AGENTS.md.
+Preparation has ended. Main combines the team's UI and trend backend; their data connection and later sections remain unfinished. Follow AGENTS.md and docs/team-integration.md. Preserve ongoing edits and use a separate worktree for simultaneous writers.

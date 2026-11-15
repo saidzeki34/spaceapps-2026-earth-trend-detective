@@ -20,3 +20,6 @@
 | 2026-11-15 | GLDAS locations: the CAMELS-CH mountain selection, area-weighted over catchment outlines; variables: runoff (surface + baseflow), snowmelt, precipitation, snowfall, temperature, evapotranspiration, SWE (no soil moisture) | User decision |
 | 2026-11-15 | GLDAS windows: 10-year steps, final window kept if >= 5 years; >= 20 valid years required | User decision; record starts 2000 |
 | 2026-11-15 | Access via Giovanni Time Series API, not Hydrology Data Rods | GES DISC announced Data Rods discontinuation (no earlier than 2025-10-31) |
+| 2026-11-15 | Combine available team work onto main in an isolated worktree; preserve original branches and active local edits | User request; includes work/backend and the saved local UI, with both feature backend branches retained in history |
+| 2026-11-15 | Keep archive/generated-implementation separate; preserve the local UI first on archive/ui-snapshot-20261115 at 675913d | Superseded implementation stays archived; the active UI folder is copied, not switched or stashed |
+| 2026-11-15 | Skip DFL's commercial file in this integration | User clarification after the file was not found in local files or published branches |
