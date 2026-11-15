@@ -18,7 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-ui = ["streamlit>=1.67"]
+# Compatibility with the earlier install command; the web UI needs no extra framework.
+ui = []
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

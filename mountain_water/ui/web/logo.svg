@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="RivaScope">
+  <rect width="64" height="64" rx="12" fill="#f7f5f0"/>
+  <circle cx="32" cy="32" r="27" stroke="#1d2220" stroke-width="2"/>
+  <path d="M11 43 L25 20 L32 30 L38 23 L53 43" stroke="#1d2220" stroke-width="2"/>
+  <path d="M31 34 C25 39 37 42 31 47 C26 51 35 53 31 58" stroke="#1f5c7a" stroke-width="3"/>
+</svg>

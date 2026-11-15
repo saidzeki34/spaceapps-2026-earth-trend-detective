@@ -1,48 +1,62 @@
-"""Right-box cards for the prediction year, and the physical-models card."""
+"""The prediction year and the physical-model section.
+
+Neither has a real source yet: the prediction model section is still empty.
+Everything returned here is imaginary and marked as such, so the screens have
+something to show. Replace the calls to ``imaginary`` when the model exists.
+"""
 
 from __future__ import annotations
 
-import streamlit as st
+from mountain_water.ui import controls, imaginary, trend_view
+from mountain_water.ui.data_source import RiverData
 
-from mountain_water.ui import data_source, elements, state
-from mountain_water.ui.charts.prediction import monthly_values, prediction_figure
-from mountain_water.ui.trend_view import GROUP_TITLES
+_DISCHARGE = controls.VARIABLES_BY_ID["discharge"]
+_MONTHS = {"kind": "months", "count": 12}
 
 
-def render_prediction_cards(river_id: str, year: int, sample_preview: bool) -> bool:
-    """Predicted value per month for each ticked variable. Returns False if none is ticked."""
-    drew_any = False
-    for group, title in GROUP_TITLES:
-        variables = state.selected_variables(group)
-        if not variables:
-            continue
-        drew_any = True
-        elements.section_label(f"{title} · predicted for {year}")
-        for variable in variables:
-            # A prediction is always given per month, whatever the calculation method.
-            series = data_source.get_series(
-                river_id, variable.id, year, state.METHOD_MONTHLY, predicted=True, sample_preview=sample_preview
-            )
-            with st.container(border=True):
-                elements.card_header(variable.label_with_unit, "Prediction", variable.color)
-                elements.plot(
-                    prediction_figure(series, color=variable.color, unit=variable.unit),
-                    key=f"plot_pred_{variable.id}",
-                )
-                elements.month_grid(monthly_values(series), unit=variable.unit)
-    if drew_any:
-        elements.note(
-            "A prediction is an estimate for the year after the latest data, one value per month. "
-            "It is drawn dashed to keep it apart from measured years."
+def chart(data: RiverData, variable_ids: list[str], year: int, with_usual: bool) -> dict:
+    """An imaginary prediction for each ticked variable: one value per month of the year ahead."""
+    series = []
+    for variable_id in variable_ids:
+        variable = controls.VARIABLES_BY_ID[variable_id]
+        usual = trend_view.usual_monthly(data, variable)
+        values = imaginary.predict_monthly(
+            usual, f"{data.river.id}|{variable.id}|{year}", additive=variable.id == "temperature"
         )
-    return drew_any
+        series.append({
+            "id": variable.id, "label": variable.label, "unit": variable.unit, "color": variable.color,
+            "group": variable.group, "values": values, "usual": usual if with_usual else None,
+            "imaginary": True, "predicted": True,
+        })
+    return {"x": {**_MONTHS, "year": year}, "series": series}
 
 
-def render_physical_models_card() -> None:
-    """Reserved for the team's physical flow model."""
-    with st.container(border=True):
-        elements.card_header("Physical models", "Not available yet", "#a78bfa")
-        elements.note(
-            "The team's flow model has not been supplied yet. Its equation, inputs and results "
-            "will be shown here once the prediction model section provides them."
-        )
+def predicted_flow(data: RiverData, year: int) -> list[float | None]:
+    """The imaginary predicted discharge of each month, for the risk section."""
+    return imaginary.predict_monthly(
+        trend_view.usual_monthly(data, _DISCHARGE), f"{data.river.id}|{_DISCHARGE.id}|{year}"
+    )
+
+
+def physical_model(data: RiverData, year: int, predicted: bool) -> dict:
+    """Imaginary output of the team's physical flow model next to the discharge of that year."""
+    reference = predicted_flow(data, year) if predicted else trend_view.monthly_values(data, _DISCHARGE, year)
+    base = [r if r is not None else u for r, u in zip(reference, trend_view.usual_monthly(data, _DISCHARGE))]
+    modelled, agreement = imaginary.model_monthly(base, f"{data.river.id}|{year}")
+    return {
+        "chart": {
+            "x": {**_MONTHS, "year": year},
+            "series": [
+                {"id": "reference", "label": "Predicted discharge" if predicted else "Discharge",
+                 "unit": _DISCHARGE.unit, "color": _DISCHARGE.color, "values": reference, "usual": None,
+                 "imaginary": predicted or data.is_imaginary(_DISCHARGE.column), "predicted": predicted},
+                {"id": "model", "label": "Physical model", "unit": _DISCHARGE.unit, "color": "#a14a76",
+                 "values": modelled, "usual": None, "imaginary": True, "predicted": False},
+            ],
+        },
+        "agreement": f"{agreement:.2f}",
+        "note": (
+            "The team's physical flow model has not been supplied yet. The model line and the agreement "
+            "figure are imaginary placeholders."
+        ),
+    }

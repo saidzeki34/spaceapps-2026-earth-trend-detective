@@ -1,5 +1,7 @@
 # Team integration handoff — 2026-11-15
 
+This is the historical first integration (PR #9), before the submitted web UI and Norway/station backend updates. See [submitted-handoffs.md](submitted-handoffs.md) for the current state; the Streamlit checks and disconnected-UI description below apply only to that earlier checkpoint.
+
 The user requested that available team work be combined onto main without losing ongoing progress. This is a source integration, not completion of the application.
 
 ## Included and preserved
