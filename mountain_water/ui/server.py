@@ -1,15 +1,5 @@
-"""The small local web server behind the RivaScope window.
-
-It hands out the pages in ``web/`` and answers their questions as JSON. It
-uses only Python's standard library and listens on this computer only.
-
-The data modules (pandas and the trend section) are imported on the first
-request that needs them, not when this file is loaded. That lets the window
-open at once and show the loading screen while the data is being read.
-"""
-
+"""Local RivaScope server: static assets and read-only saved-data routes."""
 from __future__ import annotations
-
 import json
 import os
 import time
@@ -22,37 +12,25 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 HOST = "127.0.0.1"
 WEB_DIR = Path(__file__).resolve().parent / "web"
-# After the window says goodbye, wait this long before stopping: a page reload says goodbye too.
 CLOSE_GRACE_SECONDS = 2.5
-
 CONTENT_TYPES = {
-    ".html": "text/html; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".svg": "image/svg+xml",
-    ".png": "image/png",
-    ".ico": "image/x-icon",
+    ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
     ".txt": "text/plain; charset=utf-8",
 }
 
-
 @lru_cache(maxsize=1)
 def _plotly_js() -> bytes:
-    """Use the installed Plotly runtime, matching the backend figure version."""
     from plotly.offline import get_plotlyjs
-
     return get_plotlyjs().encode("utf-8")
-
 
 class AppServer(ThreadingHTTPServer):
     daemon_threads = True
-    # On Windows, "reuse address" would let two copies listen on the same port at once.
     allow_reuse_address = os.name != "nt"
     verbose = False
-    auto_exit = False  # stop when the window closes
-    closing_at: float | None = None  # moment to stop, set when the window says goodbye
-
+    auto_exit = False
+    closing_at: float | None = None
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "RivaScope"
@@ -64,11 +42,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
-        self.server.closing_at = None  # someone is (still) there
+        self.server.closing_at = None
         try:
-            if url.path in {"/api/catalog", "/api/figure", "/api/table", "/api/courses"}:
+            if url.path == "/api/risk":
+                from mountain_water.ui.risk_view import assessment
+                query = {key: values[0] for key, values in parse_qs(url.query).items()}
+                self._json(assessment(query))
+            elif url.path in {"/api/catalog", "/api/figure", "/api/table", "/api/courses"}:
                 from mountain_water.ui import backend
-
                 query = {key: values[0] for key, values in parse_qs(url.query).items()}
                 if url.path == "/api/catalog":
                     result = backend.catalogue()
@@ -78,7 +59,6 @@ class Handler(BaseHTTPRequestHandler):
                     result = backend.table(query)
                 else:
                     from mountain_water.ui.river_geometry import geojson_for_gauges
-
                     datasets = {item["id"]: item for item in backend.catalogue()["datasets"]}
                     dataset = datasets[query.get("dataset", "ch")]
                     result = geojson_for_gauges(dataset.get("gauges", []))
@@ -94,8 +74,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
         except ConnectionError:
-            pass  # the window went away while we were answering
-        except Exception as error:  # noqa: BLE001 - show the problem on screen instead of a dead page
+            pass
+        except Exception as error:
             traceback.print_exc()
             self._json({"error": f"{type(error).__name__}: {error}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -103,7 +83,6 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/refresh":
             from mountain_water.ui import backend
-
             self._json(backend.refresh())
         elif path == "/api/bye":
             if self.server.auto_exit:
@@ -122,8 +101,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, payload, status: HTTPStatus = HTTPStatus.OK) -> None:
         from plotly.utils import PlotlyJSONEncoder
-
-        # Plotly's encoder retains typed arrays and converts NaN to JSON null.
         body = json.dumps(payload, cls=PlotlyJSONEncoder, ensure_ascii=False).encode("utf-8")
         self._send(status, CONTENT_TYPES[".json"], body)
 
@@ -134,11 +111,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.NOT_FOUND, CONTENT_TYPES[".txt"], b"Not found")
             return
         content_type = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
-        self._send(HTTPStatus.OK, content_type, target.read_bytes())
-
+        body = target.read_bytes()
+        if target == WEB_DIR / "index.html":
+            # Add the isolated modal without rewriting the submitted UI template.
+            body = body.replace(b"</body>", b'<script type="module" src="/js/risk.js"></script></body>')
+        self._send(HTTPStatus.OK, content_type, body)
 
 def make_server(port: int, verbose: bool = False) -> AppServer:
-    """Listen on the wanted port, or on a nearby free one if it is taken."""
     for candidate in [*range(port, port + 20), 0]:
         try:
             server = AppServer((HOST, candidate), Handler)
