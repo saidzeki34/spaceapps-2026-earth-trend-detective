@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> None:
     st.add_argument("--period", type=int, nargs=2, default=(1981, 2020), metavar=("FIRST", "LAST"),
                     help="Calendar years that must be complete (default 1981 2020)")
     st.add_argument("--baseline", type=int, nargs=2, default=(1981, 2000), metavar=("FIRST", "LAST"),
-                    help="Years whose mean the % changes refer to (default 1981 2000)")
+                    help="Years whose mean the percentage changes refer to (default 1981 2000)")
     st.add_argument("--all-countries", action="store_true", help="Also use CAMELS-CH gauges outside Switzerland")
     st.add_argument("--out", default=None, help="Output folder (default data/exports/trend_stations)")
 

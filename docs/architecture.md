@@ -2,7 +2,7 @@
 
 The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (later), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
 
-The tables below record responsibilities agreed during the skeleton delivery. The team has since implemented the UI and trend backend; see [team-integration.md](team-integration.md), the [trend guide](../mountain_water/trend/README.md) and the [map guide](../mountain_water/ui/map_component/README.md) for their actual state. The UI/backend connection, risk assessment, prediction and shared coordination remain unfinished. A planned responsibility is not a claim that its implementation is complete.
+The tables below record responsibilities agreed during the skeleton delivery. The submitted UI now uses a standard-library web server and web/ assets, replacing the former Streamlit charts/ files. It reads saved Swiss backend tables and uses labelled imaginary stand-ins. See [submitted-handoffs.md](submitted-handoffs.md), the [UI guide](../mountain_water/ui/README.md) and the [trend guide](../mountain_water/trend/README.md) for the actual file map and available features. Backend Norway/station features are not yet connected to the UI; dedicated risk, prediction and shared coordination modules remain unfinished. The historical tables are planning responsibilities, not a claim that every file still exists or is complete.
 
 ## Folder overview
 
@@ -12,7 +12,7 @@ streamlit_app.py
 mountain_water/
   __init__.py
   ui/
-    charts/
+    web/                # submitted web UI assets
   trend/
   risk_assessment/       # later
   predictionmodel/       # much later
@@ -26,7 +26,7 @@ tests/
 docs/
 ```
 
-The root entry points remain empty. Launch the existing UI via mountain_water/ui/app.py and the backend via python -m mountain_water.trend. The backend's tests live in tests/trend/; shared, risk and prediction placeholders remain empty.
+The root entry points remain empty. Launch the UI via python -m mountain_water.ui and the backend via python -m mountain_water.trend. The backend's tests live in tests/trend/; shared, risk and prediction placeholders remain empty.
 
 ## ui — first phase
 

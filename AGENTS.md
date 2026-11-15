@@ -16,7 +16,7 @@ Generated implementation was preserved separately on archive/generated-implement
 6. docs/challenge-reference.md and docs/research/ for original sources and access gaps
 
 ## Shared rules
-- Organize work around ui/ and trend/ first, risk_assessment/ later, and predictionmodel/ much later, under mountain_water/. Common contracts and source access belong in shared/. See docs/architecture.md for intended responsibilities and docs/team-integration.md for current delivery status.
+- Organize work around ui/ and trend/ first, risk_assessment/ later, and predictionmodel/ much later, under mountain_water/. Common contracts and source access belong in shared/. See docs/architecture.md for intended responsibilities and docs/submitted-handoffs.md for current delivery status.
 - Inspect git status and the current branch first. Preserve teammate files and uncommitted work. Use separate worktrees for simultaneous writers.
 - Main combines accepted team work. UI and integration branches start from main and PRs target main. Preserve the backend team's documented workflow: backend feature branches start from origin/work/backend and PRs target work/backend; combine accepted backend work onto main with an integration PR. Preserve all branches without resetting or force-pushing. Never switch, stash or reset a checkout another agent is actively editing; integrate in a separate worktree.
 - One human owns each task. Do not infer assignments from branch names. Coordinate shared contracts before implementation.

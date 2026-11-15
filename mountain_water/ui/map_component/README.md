@@ -28,10 +28,9 @@ interface as a whole.
 | Catchment outlines and measuring points of the measured rivers | CAMELS-CH catchment file, read through the trend section's dataset | Read at run time by `data_source.catchment_outlines()`, simplified to 60 m for drawing. Nothing is copied into the repository. |
 | Map library | Leaflet 1.9.4 (BSD-2-Clause) | Kept in `web/vendor/leaflet/` with its licence; no longer loaded from a CDN. |
 
-The earlier source notes were recorded in `docs/source-ledger.md` by the team
-integration. Three things still need an entry there: Leaflet kept in the
-repository, the OpenStreetMap river courses, and the CAMELS-CH catchment file
-used on the map.
+These source notes, including vendored Leaflet, OpenStreetMap river courses
+and CAMELS-CH display catchments, are recorded in `docs/source-ledger.md` by
+the submitted-handoff integration. The review limits below still apply.
 
 ## How the large rivers are chosen and drawn
 

@@ -23,6 +23,8 @@
 | 2026-11-15 | Combine available team work onto main in an isolated worktree; preserve original branches and active local edits | User request; includes work/backend and the saved local UI, with both feature backend branches retained in history |
 | 2026-11-15 | Keep archive/generated-implementation separate; preserve the local UI first on archive/ui-snapshot-20261115 at 675913d | Superseded implementation stays archived; the active UI folder is copied, not switched or stashed |
 | 2026-11-15 | Skip DFL's commercial file in this integration | User clarification after the file was not found in local files or published branches |
+| 2026-11-15 | Converge the subsequently submitted local web UI and latest work/backend onto main | User confirmed both handoffs; preserve UI at 01c421a on archive/ui-handoff-20261115 and backend tip 46b8933 with full history |
+| 2026-11-15 | Retain backend feature PRs to work/backend, with UI and integration PRs to main | Reconcile the backend handoff's workflow instructions with the user's main integration request; no original branches are reset or deleted |
 | 2026-11-15 | Norway backend on feature/backend-nve (from feature/backend-gldas): NVE HydAPI daily discharge, NVE catchment outlines, seNorge precipitation/temperature/SWE via NVE GridTimeSeries | User request; seNorge chosen as local drivers |
 | 2026-11-15 | Norway filter: median catchment elevation >= 800 m, area <= 500 km², unregulated (any regulation/reservoir metadata > 0 excludes), >= 30 valid years; period 1961–latest, 10-year windows (final >= 5 years kept) | User decision |
 | 2026-11-15 | GLDAS-2.1 comparison also for the Norwegian selection (`--region no`), same variables and method as Switzerland | User request |
