@@ -5,23 +5,39 @@ import pytest
 from mountain_water.trend import gldas, pipeline, plots, sources
 from mountain_water.trend.catchment_grid import weighted_mean
 
-SAMPLE = """Title:,Time Series, Area-Averaged of Tair_f_inst
-Fill Value (Data):,-9999.0
+# Real response layout from the Giovanni API (probe on 2026-11-15), shortened, with a fill value added.
+SAMPLE = """prod_name,GLDAS_NOAH025_3H.2.1
+doi,10.5067/E7TYRXPJKWOQ
+param_short_name,Tair_f_inst
+unit,K
+undef,-9999
+lat,46.625
+lon,8.375
 
 Timestamp (UTC),Data
-2010-01-01T00:00:00,270.0
-2010-01-01T03:00:00,-9999.0
-2010-01-01T06:00:00Z,272.5
+2010-01-01 00:00,252.446
+2010-01-01 03:00,-9999
+2010-01-01 06:00,264.872
 """
 
 
 def test_parse_timeseries():
     series, meta = gldas.parse_timeseries(SAMPLE)
     assert len(series) == 3 and np.isnan(series.iloc[1])
-    assert series.iloc[2] == 272.5
-    assert meta["Fill Value (Data)"] == "-9999.0"
+    assert series.iloc[2] == pytest.approx(264.872)
+    assert series.index[2] == pd.Timestamp("2010-01-01 06:00")
+    assert meta["unit"] == "K" and meta["doi"] == "10.5067/E7TYRXPJKWOQ" and "Timestamp (UTC)" not in meta
     with pytest.raises(ValueError):
-        gldas.parse_timeseries("Error:,token expired\n")
+        gldas.parse_timeseries("Error,token expired\n")
+
+
+def test_unit_check():
+    tair = next(v for v in gldas.VARIABLES if v.name == "Tair_f_inst")
+    rain = next(v for v in gldas.VARIABLES if v.name == "Rainf_f_tavg")
+    gldas.check_unit(tair, {"unit": "K"})
+    gldas.check_unit(rain, {"unit": "kg m^-2 s^-1"})
+    with pytest.raises(ValueError):
+        gldas.check_unit(rain, {"unit": "mm/day"})
 
 
 def test_to_daily_units():

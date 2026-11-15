@@ -46,6 +46,10 @@ class Variable:
     unit: str      # unit after conversion to daily values
 
 
+# Units the API reports per kind (``unit`` line of the response); conversions in to_daily() assume them.
+SOURCE_UNITS = {"acc": "kg m-2", "rate": "kg m-2 s-1", "kelvin": "K", "state": "kg m-2"}
+
+
 VARIABLES = [
     Variable("Qs_acc", "runoff_surface", "acc", "mm/d"),
     Variable("Qsb_acc", "runoff_base", "acc", "mm/d"),
@@ -117,17 +121,19 @@ _TIME_LINE = re.compile(r"^\s*\d{4}-\d{2}-\d{2}[T ]\d{2}")
 
 
 def parse_timeseries(text: str) -> tuple[pd.Series, dict[str, str]]:
-    """Parse a Giovanni time-series CSV: ``key:,value`` header lines, then ``Timestamp (UTC),Data``.
+    """Parse a Giovanni time-series CSV.
 
-    Tolerant of variations: everything before the first timestamped line is treated as metadata.
-    Fill values (-9999) become NaN.
+    Layout (verified 2026-11-15): ``key,value`` metadata lines (prod_name, doi, param_short_name,
+    unit, undef, lat, lon, ...), a blank line, ``Timestamp (UTC),Data``, then rows like
+    ``2010-01-01 03:00,259.673``. Everything before the first timestamped row is metadata; the fill
+    value (``undef``, default -9999) becomes NaN.
     """
     meta: dict[str, str] = {}
     data_lines = []
     for line in text.splitlines():
         if _TIME_LINE.match(line):
             data_lines.append(line)
-        elif not data_lines and line.strip():
+        elif not data_lines and line.strip() and not line.lower().startswith("timestamp"):
             key, _, value = line.partition(",")
             meta[key.strip().rstrip(":").strip()] = value.strip().strip('"')
     if not data_lines:
@@ -135,8 +141,21 @@ def parse_timeseries(text: str) -> tuple[pd.Series, dict[str, str]]:
     body = "\n".join(data_lines).replace("\t", ",")
     df = pd.read_csv(io.StringIO(body), header=None, usecols=[0, 1], skipinitialspace=True, dtype={0: str})
     times = pd.to_datetime(df[0].str.strip().str.rstrip("Z"), format="ISO8601")
-    values = pd.to_numeric(df[1], errors="coerce").where(lambda v: v > FILL_VALUE + 1)
+    fill = float(meta.get("undef", FILL_VALUE))
+    values = pd.to_numeric(df[1], errors="coerce")
+    values = values.where((values != fill) & (values > FILL_VALUE + 1))
     return pd.Series(values.to_numpy(), index=times, name="value"), meta
+
+
+def _norm_unit(unit: str) -> str:
+    return unit.replace("^", "").replace("**", "").replace(" ", "").lower()
+
+
+def check_unit(variable: Variable, meta: dict[str, str]) -> None:
+    """Fail loudly if the API reports a different unit than the conversion assumes."""
+    unit = meta.get("unit")
+    if unit is not None and _norm_unit(unit) != _norm_unit(SOURCE_UNITS[variable.kind]):
+        raise ValueError(f"{variable.name}: API unit '{unit}', expected '{SOURCE_UNITS[variable.kind]}'")
 
 
 def to_daily(series: pd.Series, kind: str) -> pd.Series:
@@ -237,7 +256,11 @@ def load_cell_daily(raw_dir: Path, lat: float, lon: float) -> pd.DataFrame:
     folder = raw_dir / COLLECTION / f"{lat:.3f}_{lon:.3f}"
     cols = {}
     for v in VARIABLES:
-        parts = [parse_timeseries(p.read_text())[0] for p in sorted(folder.glob(f"{v.name}_*.csv"))]
+        parts = []
+        for path in sorted(folder.glob(f"{v.name}_*.csv")):
+            series, meta = parse_timeseries(path.read_text())
+            check_unit(v, meta)
+            parts.append(series)
         if parts:
             cols[v.column] = to_daily(pd.concat(parts), v.kind)
     if not cols:

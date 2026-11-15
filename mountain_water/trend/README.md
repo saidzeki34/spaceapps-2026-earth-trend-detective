@@ -69,11 +69,7 @@ python -m mountain_water.trend report --source gldas --gauge 2268   # -> data/ex
 | `Tair_f_inst` | `temperature_mean` | K − 273.15, °C |
 | `SWE_inst` | `swe` | mm |
 
-Not yet verified against the live API, because this development environment had no network access:
-- the exact CSV layout of the Giovanni response (the parser accepts `key:,value` headers followed by `timestamp,value` rows)
-- whether all 8 variable names are available through the API
-
-Run `download --source gldas --probe` first. It prints the raw response. If a variable fails, it's listed in `data/raw/gldas/failed_requests.csv`.
+Checked against the live API on 2026-11-15 with `--probe`: the token is accepted and the response parses. It has `key,value` metadata lines including `unit` and `undef`, then `Timestamp (UTC),Data` rows such as `2010-01-01 03:00,259.673`. When the cached data is loaded, each variable's reported `unit` is checked against the unit the conversion assumes (`kg m-2` for `_acc`, `kg m-2 s-1` for `_tavg` rates, `K`, `kg m-2` for SWE). A mismatch stops the build instead of silently producing wrong numbers. The full download hasn't been run yet. Any variable the API refuses is listed in `data/raw/gldas/failed_requests.csv`.
 
 Interpretation: GLDAS runoff isn't routed through river channels, so its timing leads observed discharge. A 0.25° cell is larger than many of these catchments, and glaciers and hydropower aren't represented. Treat GLDAS as consistent model context, and use the comparison with CAMELS-CH to see where it can stand in for observations.
 

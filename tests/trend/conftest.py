@@ -165,14 +165,18 @@ class FakeGiovanni:
         }[variable]
         values = np.asarray(values, dtype=float)
         values[5] = -9999.0  # one fill value per request
-        lines = [
-            "Title:,Time Series, Area-Averaged of synthetic test data",
-            f"User Start Date:,{start}",
-            f"Location:,[{lat},{lon}]",
-            "Fill Value (Data):,-9999.0",
+        unit = {"Tair_f_inst": "K", "Rainf_f_tavg": "kg m-2 s-1", "Snowf_tavg": "kg m-2 s-1",
+                "Evap_tavg": "kg m-2 s-1"}.get(variable, "kg m-2")
+        lines = [  # same layout as the real Giovanni response
+            "prod_name,GLDAS_NOAH025_3H.2.1",
+            f"param_short_name,{variable}",
+            f"unit,{unit}",
+            "undef,-9999",
+            f"lat,{lat}",
+            f"lon,{lon}",
             "",
             "Timestamp (UTC),Data",
-        ] + [f"{ts:%Y-%m-%dT%H:%M:%S},{v:.6g}" for ts, v in zip(t, values)]
+        ] + [f"{ts:%Y-%m-%d %H:%M},{v:.6g}" for ts, v in zip(t, values)]
         return "\n".join(lines) + "\n"
 
 
