@@ -270,13 +270,13 @@ function renderSide() {
     return;
   }
   const sources = catalog.datasets.filter(d => d.country === state.country);
-  const sourceHTML = sources.filter(d => d.status === 'ready').length > 1
+  const sourceHTML = sources.some(d => d.status === 'ready' && d.id !== state.dataset)
     ? `<label class="pickbox">Source<select id="dataset">${sources.map(d => `<option value="${d.id}" ${d.id === state.dataset ? 'selected' : ''} ${d.status === 'ready' ? '' : 'disabled'}>${esc(d.label)}</option>`).join('')}</select></label>` : '';
   const river = gauge();
   if (!river) {
     const head = `<div class="side-head"><button class="back" data-action="europe">← Europe</button><h2>${esc(countryName(state.country))}</h2>`;
     if (data?.status !== 'ready') {
-      side.innerHTML = `${head}<small>${esc(data?.label || '')}</small></div><div class="na-box"><b>Not built</b><code>${esc(data?.build_command || '')}</code></div>`;
+      side.innerHTML = `${head}<small>${esc(data?.label || '')}</small></div>${sourceHTML}<div class="na-box"><b>${data?.status === 'error' ? 'Unreadable' : 'Not built'}</b><code>${esc(data?.build_command || '')}</code></div>`;
       return;
     }
     side.innerHTML = `${head}<small>${esc(data.label)} · ${data.count} rivers · ${period(data)}</small></div>${sourceHTML}
@@ -566,7 +566,7 @@ function drawHeadline(element, rows) {
   const body = $('.tbl', element);
   body.hidden = false;
   body.className = 'tbl headline';
-  body.innerHTML = `<div class="readout">${cells}</div>${table}`;
+  body.innerHTML = `<p class="key">Saved trend indicators only. Risk assessment, requirements, exposure estimates and risk scores are not implemented. Indicator selections by occupation await team review.</p><div class="readout">${cells}</div>${table}`;
 }
 
 // ---------------------------------------------------------------- tables and export
@@ -612,9 +612,11 @@ function setFull(id) {
 
 async function reloadSaved() {
   const button = $('[data-action="refresh"]');
+  button.removeAttribute('title');
   button.disabled = true; button.textContent = 'Reading';
   try { catalog = await api('/api/refresh', { method: 'POST' }); courseCache.clear(); $('#about-body').innerHTML = aboutHTML(); if (!$('#app').hidden) render(); }
-  catch (error) { button.textContent = error.message; }
+  catch (error) { button.textContent = `Retry reload: ${error.message}`; button.title = error.message; }
+  finally { button.disabled = false; }
 }
 
 // ---------------------------------------------------------------- events

@@ -86,6 +86,36 @@ def test_missing_model_is_reported_without_substituting_observations(saved_backe
     assert "build --source gldas" in response["build_command"]
 
 
+def test_flow_surface_keeps_missing_days_years_and_flagged_fills_as_gaps(saved_backend):
+    backend, result = saved_backend
+    first = result.daily[result.daily.hydro_doy != 3].copy()
+    first["discharge_vol_filled"] = first.hydro_doy == 20
+    result.daily = pd.concat([first, first.assign(hydro_year=2022)], ignore_index=True)
+    before = result.daily.copy(deep=True)
+    fig = backend._flow_surface(result, "A", {"year": "2020"})
+    surface = fig.data[0]
+    assert list(surface.y) == [2020, 2021, 2022]
+    assert surface.z.shape == (3, 365)
+    assert surface.z[0, 0] == 0  # An observed zero is retained.
+    assert np.isnan(surface.z[1]).all()  # Entire absent year.
+    assert np.isnan(surface.z[:, [1, 2, 19]]).all()  # NaN, absent day, interpolated day.
+    assert surface.connectgaps is False
+    assert fig.data[1].connectgaps is False
+    assert fig.layout.meta["interpolated_days_hidden"] == 2
+    pd.testing.assert_frame_equal(before, result.daily)
+
+
+def test_daily_chart_hides_interpolation_but_export_preserves_record(saved_backend):
+    backend, result = saved_backend
+    result.daily["discharge_vol_filled"] = result.daily.hydro_doy == 3
+    fig = backend._timeseries(result, "A", {"variables": "discharge_vol", "interval": "daily", "year": "2020"})
+    assert np.isnan(fig.data[0].y[2])
+    assert fig.layout.meta["interpolated_days_hidden"] == 1
+    table = backend.table({"dataset": "ch", "gauge": "A", "year": "2020"})
+    assert table["rows"][2]["discharge_vol"] == 2
+    assert table["rows"][2]["discharge_vol_filled"] is True
+
+
 def test_successful_model_comparison_uses_backend_common_years(saved_backend, monkeypatch):
     backend, observed = saved_backend
     observed.annual = pd.DataFrame(dict(gauge_id="A", hydro_year=np.arange(2000, 2012),

@@ -330,13 +330,17 @@ class Backend:
         hidden = blanked.get("discharge_vol", 0)
         grid = daily.pivot_table(index="hydro_year", columns="hydro_doy", values="discharge_vol")
         if grid.empty: raise ValueError("No saved discharge for this gauge")
+        # A pivot drops entirely missing days/years. Keep their coordinates so
+        # the surface cannot join observations across an unobserved interval.
+        grid = grid.reindex(index=range(int(daily.hydro_year.min()), int(daily.hydro_year.max()) + 1),
+                            columns=range(1, 366))
         start = int(result.meta.get("settings", {}).get("hydro_year_start_month") or 10)
         months = [(start - 1 + i) % 12 + 1 for i in range(12)]
         firsts = np.cumsum([0] + [calendar.monthrange(2001, m)[1] for m in months[:-1]]) + 1
         unit = result.meta.get("units", {}).get("discharge_vol", "")
         label = "GLDAS runoff" if result.meta.get("source") == "gldas" else "Discharge"
         fig = go.Figure(go.Surface(
-            x=grid.columns.to_numpy(), y=grid.index.to_numpy(), z=grid.to_numpy(), showscale=False,
+            x=grid.columns.to_numpy(), y=grid.index.to_numpy(), z=grid.to_numpy(), showscale=False, connectgaps=False,
             contours=dict(z=dict(show=True, usecolormap=True, project=dict(z=True))),
             hovertemplate="Day %{x} of hydrological year %{y}: %{z:.2f} " + unit + "<extra></extra>"))
         year = query.get("year")
