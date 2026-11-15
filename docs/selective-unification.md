@@ -27,6 +27,12 @@ Downloaded observations, processed datasets, caches, credentials and account-loc
 
 An independent assistant software review found no merge blockers in the selected snapshot and integration code changes. It confirmed that trend algorithms and the separate risk-assessment implementation were unchanged. This is not human review or validation of scientific findings.
 
-Checksums confirmed that all nine original checkout files still matched the preservation snapshot during integration. Tests and browser checks remain in progress at the time this inventory is written. Record their actual commands, results and the final reviewed commit before merging; this document does not itself assert that tests or merge have succeeded.
+Checksums confirmed that all nine original checkout files still matched the preservation snapshot during integration. The reviewed code checkpoint is `64410d8`.
+
+- The focused Python suite passed: **34 tests in 157.25 seconds** (`tests/test_ui_backend.py`, `tests/test_ui_server.py`, `tests/test_ui_river_geometry.py`). Third-party pytest plugin autoload was disabled. An earlier attempt had fixture setup errors because the temporary directory's parent did not exist; the successful run used an absolute path beneath the original checkout's existing ignored `tmp/` directory.
+- JavaScript module syntax, targeted source-availability/refresh-retry/risk-disclosure checks and `git diff --check` passed.
+- Browser verification was attempted but did not complete while local process execution stalled; no browser pass is claimed. The unchanged full trend suite was not rerun. Synthetic software tests and assistant review do not validate scientific conclusions.
+
+[PR #16](https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective/pull/16) records publication and merge status. At eligibility inspection, main was unprotected with no required status-check contexts, and the PR had no check runs or requested reviewers. Original branches remain available. Before synchronizing the original checkout, verify its saved files still match the checkpoint and preserve an additional local stash; leave any newly edited files alone.
 
 Do not repeat the historical `01c421a` appearance restoration over the newer selected UI. Future changes should start from the accepted integrated version, preserve the real data connection and address a specific user request rather than introduce another redesign.
