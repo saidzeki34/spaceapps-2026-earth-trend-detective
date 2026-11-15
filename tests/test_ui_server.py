@@ -1,6 +1,7 @@
 """HTTP boundary checks. Fixtures below are synthetic software-test data only."""
 
 import json
+import hashlib
 import threading
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -76,3 +77,20 @@ def test_empty_courses_and_bad_dataset(http_app):
     with pytest.raises(HTTPError) as error:
         urlopen(base + "/api/courses?dataset=unknown", timeout=15)
     assert error.value.code == 404
+
+
+def test_logo_and_si_metadata_are_served_without_old_generated_mark(http_app):
+    base, _ = http_app
+    manifest = get_json(base, "/si-use.json")
+    with urlopen(base + "/logo.webp", timeout=15) as response:
+        assert response.headers["Content-Type"] == "image/webp"
+        assert hashlib.sha256(response.read()).hexdigest() == manifest["media"]["logo"]["sha256"]
+    with urlopen(base + "/", timeout=15) as response:
+        html = response.read().decode("utf-8")
+    assert html.count('src="logo.webp"') == 3
+    assert 'name="si-assistance"' in html
+    assert 'logo.svg' not in html and '<svg class="mark"' not in html
+    with pytest.raises(HTTPError) as error:
+        urlopen(base + "/logo.svg", timeout=15)
+    assert error.value.code == 404
+    assert get_json(base, "/api/table")["si_assistance"] == manifest

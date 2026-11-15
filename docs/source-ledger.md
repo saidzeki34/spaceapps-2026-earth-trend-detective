@@ -1,5 +1,7 @@
 # Source and licence ledger
 
+Current SI-use disclosure: [description and media requirements](si-disclosure.md), [machine-readable scope](../mountain_water/si-use.json). On 2026-11-15, OpenAI Codex assisted replacement of the old generated mark with the user's hand-made `Drawing-3.sketchpad.webp`, copied byte-for-byte as `ui/web/logo.webp` (SHA-256 `42f129b867b389c2a3b233b53150e9cbccc20870d778415922d20fb33fafb6b5`). It also added visible code-use credit, API/build/export metadata, focused checks and removal of decorative comment separators. No observations were generated, no scientific calculation was changed, and the artwork was not edited or regenerated. Historical entries below retain their original scope.
+
 The original main skeleton contained no application data or runtime dependencies. The team integration now includes the source code and display assets recorded below. Inherited source records are preserved; merging them is not independent verification of their scientific or licence claims.
 
 | Material | Use | Record |

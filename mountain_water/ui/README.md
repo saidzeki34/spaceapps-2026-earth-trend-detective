@@ -1,5 +1,7 @@
 # RivaScope interface
 
+The current logo is the team's hand-made artwork, copied unchanged. SI-assisted code use is described in the **Data** dialog and [SI disclosure](../../docs/si-disclosure.md), with metadata at `/si-use.json` and in API/export results. Provider data are not SI-generated observations.
+
 The map-first front end of the team's trend backend. Flow: loading screen, occupation menu (first start only; the choice is saved and can be changed in the top bar), Europe map (Norway and Switzerland lit), country, river. It reads saved outputs only; opening or refreshing the page never downloads observations or runs a scientific build.
 
 ## Start

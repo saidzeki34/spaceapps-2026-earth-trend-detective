@@ -41,10 +41,9 @@ small, .crumbs, .top-right, .pick header, .pick footer, .splash-foot p, legend, 
 .res-head p, .res-side, .fig header, .tabs, .msg, .pager, .foot, .key, th, .yr small, .fc small, .seg, .pickbox, .filter, .about, .readout small, .readout span {
   font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
-.mark rect, .mark path { stroke: currentColor; stroke-width: 5; }
-.mark .mark-river { stroke: var(--o); }
+.mark { object-fit: contain; flex-shrink: 0; }
+.about a { color: var(--w); }
 
-/* ---------------------------------------------------------------- loading screen */
 .splash { position: fixed; inset: 0; z-index: 100; background: var(--k); display: grid; grid-template-rows: auto 1fr auto; padding: 28px 32px 24px; }
 .splash-word { align-self: end; font: 700 clamp(72px, 17vw, 260px)/.8 var(--fc); letter-spacing: -.02em; text-transform: uppercase; margin: 0 0 22px -6px; }
 .splash-bar { height: 2px; background: var(--rk); }
@@ -53,7 +52,6 @@ small, .crumbs, .top-right, .pick header, .pick footer, .splash-foot p, legend, 
 .splash-foot p { display: flex; justify-content: space-between; gap: 16px; padding-top: 10px; color: var(--gk); }
 .splash-foot button { text-decoration: underline; text-transform: uppercase; letter-spacing: .08em; }
 
-/* ---------------------------------------------------------------- occupation menu */
 .pick { position: fixed; inset: 0; background: var(--k); display: grid; grid-template-rows: 40px 1fr 40px; }
 .pick header, .pick footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 32px; color: var(--gk); min-width: 0; }
 .pick header { border-bottom: 1px solid var(--w); }
@@ -69,7 +67,6 @@ small, .crumbs, .top-right, .pick header, .pick footer, .splash-foot p, legend, 
 .pick li button:hover, .pick li button:focus-visible { background: var(--w); color: var(--k); outline: 0; }
 .pick li button:hover .ind, .pick li button:focus-visible .ind { color: var(--k); }
 
-/* ---------------------------------------------------------------- application frame */
 #app { height: 100%; display: grid; grid-template-rows: 40px minmax(0, 1fr); }
 .top { display: flex; align-items: stretch; border-bottom: 1px solid var(--w); min-width: 0; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--w); }
@@ -102,7 +99,6 @@ select option { color: var(--k); background: var(--w); }
 .res { grid-area: res; background: var(--w); color: var(--k); overflow-x: hidden; overflow-y: auto; min-width: 0; min-height: 0; container: res / inline-size; }
 .time { grid-area: time; border-top: 1px solid var(--w); min-width: 0; container: time / inline-size; }
 
-/* ---------------------------------------------------------------- left box */
 .side-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--w); }
 .side-head h2 { font: 700 clamp(24px, 13.6cqi, 40px)/.92 var(--fc); text-transform: uppercase; letter-spacing: -.005em; margin: 6px 0 8px -1px; overflow-wrap: anywhere; }
 .side-head small { display: block; color: var(--gk); line-height: 1.5; }
@@ -141,7 +137,6 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 .seg button + button { border-left: 1px solid var(--w); }
 .seg button.on { background: var(--w); color: var(--k); }
 
-/* ---------------------------------------------------------------- timeline */
 .tl { height: 100%; display: grid; grid-template-columns: 138px minmax(0, 1fr) 92px; }
 .yr { padding: 10px 16px; border-right: 1px solid var(--rk); display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .yr small { color: var(--gk); font-size: 10px; white-space: nowrap; }
@@ -173,7 +168,6 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
   .yr b { font-size: 26px; }
 }
 
-/* ---------------------------------------------------------------- results box */
 .res-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding: clamp(12px, 2.4cqi, 18px) var(--pad) clamp(10px, 1.9cqi, 14px); }
 .res-head > div:first-child { min-width: 0; }
 .res-head h2 { font: 700 clamp(30px, 8.4cqi, 76px)/.86 var(--fc); text-transform: uppercase; letter-spacing: -.01em; margin-left: -2px; overflow-wrap: anywhere; }
@@ -237,7 +231,6 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
   .readout small, .readout span { font-size: 10px; letter-spacing: .05em; }
 }
 
-/* ---------------------------------------------------------------- data dialog */
 .about { margin: auto; width: min(760px, 92vw); max-height: 86vh; background: var(--k); color: var(--w); border: 1px solid var(--w); padding: 0; text-transform: none; letter-spacing: 0; font-size: 13px; }
 .about::backdrop { background: rgba(0, 0, 0, .72); }
 .about header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--w); }
@@ -252,7 +245,6 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 .about p { padding: 12px 16px 0; color: var(--gk); line-height: 1.5; }
 .about #about-body > button { margin: 14px 16px 16px; }
 
-/* ---------------------------------------------------------------- map */
 .leaflet-container { background: #050505; font: 12px/1.3 var(--f); }
 .leaflet-bar { border: 1px solid var(--w) !important; border-radius: 0 !important; box-shadow: none !important; }
 .leaflet-bar a { background: var(--k) !important; color: var(--w) !important; border-radius: 0 !important; border-bottom: 1px solid var(--rk) !important; width: 28px !important; height: 28px !important; line-height: 26px !important; font: 400 18px var(--f) !important; }
@@ -274,7 +266,6 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 .leaflet-tooltip.map-tip::before { display: none; }
 .map-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--gk); }
 
-/* ---------------------------------------------------------------- small windows */
 @media (max-width: 1180px) { :root { --side: 248px; } }
 @media (max-height: 760px) { .side-head { padding: 10px 16px 9px; } .grp { padding: 8px 16px 9px; } .check { padding: 2px 0; } }
 @media (max-width: 860px) {

@@ -62,7 +62,6 @@ VARIABLES = [
 ]
 
 
-# --------------------------------------------------------------------------- API client
 
 
 def get_token() -> str:
@@ -114,7 +113,6 @@ class GiovanniClient:
         raise AssertionError("unreachable")
 
 
-# --------------------------------------------------------------------------- parsing
 
 
 _TIME_LINE = re.compile(r"^\s*\d{4}-\d{2}-\d{2}[T ]\d{2}")
@@ -178,7 +176,6 @@ def to_daily(series: pd.Series, kind: str) -> pd.Series:
     return daily
 
 
-# --------------------------------------------------------------------------- download + load
 
 
 def _chunks(start: str, end: str, years: int) -> list[tuple[str, str]]:

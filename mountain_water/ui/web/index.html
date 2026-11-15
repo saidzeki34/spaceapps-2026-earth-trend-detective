@@ -4,19 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RivaScope</title>
-<link rel="icon" type="image/svg+xml" href="logo.svg">
+<meta name="si-assistance" content="Code, tests and documentation were developed with SI assistance. Provider data are not SI-generated observations. See si-use.json.">
+<link rel="describedby" type="application/json" href="si-use.json">
+<link rel="icon" type="image/webp" href="logo.webp">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<!-- Loading screen -->
 <div id="splash" class="splash" role="status" aria-live="polite">
-  <svg class="mark" viewBox="0 0 64 64" width="44" height="44" fill="none" aria-hidden="true">
-    <rect x="6" y="6" width="52" height="52"/>
-    <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
-    <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
-  </svg>
+  <img class="mark" src="logo.webp" width="44" height="44" alt="RivaScope hand-made mountain and river logo">
   <div class="splash-word">RivaScope</div>
   <div class="splash-foot">
     <div class="splash-bar"><i></i></div>
@@ -24,30 +21,20 @@
   </div>
 </div>
 
-<!-- Occupation menu: shown after the loading screen until a choice has been saved -->
 <main id="occupation" class="pick" hidden>
   <header>
     <span class="brand">
-      <svg class="mark" viewBox="0 0 64 64" width="20" height="20" fill="none" aria-hidden="true">
-        <rect x="6" y="6" width="52" height="52"/>
-        <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
-        <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
-      </svg>RivaScope</span>
+      <img class="mark" src="logo.webp" width="20" height="20" alt="">RivaScope</span>
     <span>Occupation</span>
   </header>
   <ol id="choices"></ol>
   <footer><span id="pick-data"></span><button data-action="about">Data</button></footer>
 </main>
 
-<!-- The app -->
 <div id="app" hidden>
   <header class="top">
     <button class="brand" data-action="europe" title="Europe">
-      <svg class="mark" viewBox="0 0 64 64" width="20" height="20" fill="none" aria-hidden="true">
-        <rect x="6" y="6" width="52" height="52"/>
-        <path d="M12 44 L26 20 L33 31 L40 24 L52 44"/>
-        <path class="mark-river" d="M33 31 L29 40 L36 47 L32 58"/>
-      </svg>RivaScope</button>
+      <img class="mark" src="logo.webp" width="20" height="20" alt="">RivaScope</button>
     <nav class="crumbs" id="crumbs" aria-label="Location"></nav>
     <div class="top-right">
       <label>Occupation<select id="occupation-select"></select></label>

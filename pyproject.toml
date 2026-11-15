@@ -31,3 +31,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["mountain_water*"]
+
+[tool.setuptools.package-data]
+mountain_water = ["si-use.json"]
+"mountain_water.ui" = ["web/*", "web/js/*", "web/data/*", "web/vendor/leaflet/*", "RivaScope.cmd"]
