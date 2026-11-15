@@ -9,6 +9,8 @@ These are project intentions, not available features. No station catalogue, data
 
 The planned code organization is one Python application with Streamlit entry points and shared modules. Empty files reserve responsibilities without selecting algorithms or dependency versions. The physics model remains a team-owned task; no formula is supplied here.
 
+The team's sections are ui and trend for the first phase, risk_assessment later, and predictionmodel much later. Common source access, configuration and input/output concepts are grouped under shared. The subsection responsibilities and empty file map are in [architecture.md](architecture.md).
+
 ## Delivery boundary
 Included: this context, module responsibilities, interface discussion topics, active-phase instructions and zero-byte placeholders.
 

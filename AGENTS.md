@@ -16,6 +16,7 @@ Generated implementation was preserved separately on archive/generated-implement
 6. docs/challenge-reference.md and docs/research/ for original sources and access gaps
 
 ## Shared rules
+- Organize future work around ui/ and trend/ first, risk_assessment/ later, and predictionmodel/ much later, under mountain_water/. Common contracts and source access belong in shared/. See docs/architecture.md for the file map. These phase labels do not authorize implementation in a skeleton task.
 - Inspect git status and the current branch first. Preserve teammate files and uncommitted work. Use separate worktrees for simultaneous writers.
 - Main is the shared skeleton. Create small feature branches from main and PRs to main. Preserve develop and work/* branches without resetting or force-pushing.
 - One human owns each task. Do not infer assignments from branch names. Coordinate shared contracts before implementation.
