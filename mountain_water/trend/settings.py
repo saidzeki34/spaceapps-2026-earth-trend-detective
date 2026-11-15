@@ -14,10 +14,11 @@ class CatchmentFilter:
     in the dataset is used, otherwise the criterion is skipped with a warning.
     """
 
-    min_mean_elevation_m: float | None = 1500.0
+    min_mean_elevation_m: float | None = 1500.0  # Norway: median elevation (see TrendSettings.nve)
     max_area_km2: float | None = 500.0
     max_reservoirs: int | None = 0
     min_valid_years: int = 30
+    elevation_label: str = "mean elevation"  # how the elevation criterion is shown in the selection log
 
     elevation_columns: tuple[str, ...] = ("elev_mean", "mean_elev", "elevation_mean")
     area_columns: tuple[str, ...] = ("area", "area_km2", "catchment_area")
@@ -26,9 +27,11 @@ class CatchmentFilter:
 
 @dataclass
 class TrendSettings:
+    region: str = "ch"  # "ch" (CAMELS-CH) or "no" (NVE); GLDAS runs on either region's catchments
     raw_dir: Path = Path("data/raw/camels_ch")
     processed_dir: Path = Path("data/processed/trend")
     gldas_raw_dir: Path = Path("data/raw/gldas")
+    nve_raw_dir: Path = Path("data/raw/nve")
 
     # Hydrological year starts in October (snow accumulation -> melt in one year).
     # Years are labelled by the calendar year in which they end (Oct 2019-Sep 2020 = 2020).
@@ -44,10 +47,32 @@ class TrendSettings:
     filters: CatchmentFilter = field(default_factory=CatchmentFilter)
 
     @classmethod
-    def gldas(cls, **overrides) -> "TrendSettings":
+    def gldas(cls, region: str = "ch", **overrides) -> "TrendSettings":
         """Defaults for GLDAS-2.1 (record starts 2000): >= 20 valid years, keep a final window of >= 5 years."""
-        s = cls(processed_dir=Path("data/processed/trend_gldas"), min_window_years=5,
+        processed = "data/processed/trend_gldas" if region == "ch" else f"data/processed/trend_{region}_gldas"
+        s = cls(region=region, processed_dir=Path(processed), min_window_years=5,
                 filters=CatchmentFilter(min_valid_years=20))
         for key, value in overrides.items():
             setattr(s, key, value)
         return s
+
+    @classmethod
+    def nve(cls, **overrides) -> "TrendSettings":
+        """Norway (NVE): median catchment elevation >= 800 m, <= 500 km², unregulated, >= 30 valid years.
+
+        The record starts in October 1960 (hydrological years 1961-latest), so the last 10-year
+        window is kept when it has >= 5 years.
+        """
+        s = cls(region="no", processed_dir=Path("data/processed/trend_no"), min_window_years=5,
+                filters=CatchmentFilter(
+                    min_mean_elevation_m=800.0, max_area_km2=500.0, max_reservoirs=0, min_valid_years=30,
+                    elevation_columns=("elevation",), area_columns=("area",), reservoir_columns=("regulated",),
+                    elevation_label="median elevation",
+                ))
+        for key, value in overrides.items():
+            setattr(s, key, value)
+        return s
+
+    @classmethod
+    def observed(cls, region: str) -> "TrendSettings":
+        return cls.nve() if region == "no" else cls()

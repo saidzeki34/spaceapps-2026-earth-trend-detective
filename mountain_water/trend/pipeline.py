@@ -6,6 +6,8 @@ Usage from Python (e.g. Streamlit)::
     results = pipeline.load()          # cached tables from data/processed/trend
     results = pipeline.build()         # recompute from data/raw/camels_ch
     gldas = pipeline.build_gldas()     # same catchments from GLDAS-2.1 (data/raw/gldas)
+    norway = pipeline.build_nve()      # NVE discharge + seNorge (data/raw/nve)
+    no_gldas = pipeline.build_gldas(region="no")
     gldas = pipeline.load(TrendSettings.gldas().processed_dir)
 """
 
@@ -18,7 +20,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import camels_ch, comparison, drivers, gldas, preprocessing, seasonal, trends
+from . import camels_ch, comparison, drivers, gldas, nve, preprocessing, seasonal, trends
+from .catchment_grid import polygon_cell_weights
 from .flow_metrics import annual_volume_metrics
 from .registry import DRIVER_METRICS, FLOW_METRICS
 from .settings import TrendSettings
@@ -109,17 +112,34 @@ def build(settings: TrendSettings | None = None, save: bool = True) -> TrendResu
     return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)
 
 
-def build_gldas(settings: TrendSettings | None = None, gauge_ids: list[str] | None = None,
-                save: bool = True) -> TrendResults:
-    """GLDAS-2.1 Noah runoff and drivers, area-weighted over the selected CAMELS-CH catchment outlines.
+def build_nve(settings: TrendSettings | None = None, save: bool = True) -> TrendResults:
+    """Norway: NVE daily discharge + seNorge catchment meteorology, mountain filter, full analysis."""
+    s = settings or TrendSettings.nve()
+    stations = nve.load_stations(s.nve_raw_dir)
+    attrs = stations[stations["has_daily_discharge"].astype(bool)].reset_index(drop=True)
+    obs, units = nve.load_daily(s.nve_raw_dir, attrs)
+    obs = _prepare(obs, s)
+    completeness = preprocessing.year_completeness(obs, FLOW)
+    gauges, selection_log = preprocessing.select_catchments(attrs, completeness, s.filters, s.min_year_completeness)
+    selection_log.loc[0, "step"] = "NVE stations with daily discharge"
+    selection_log["step"] = selection_log["step"].str.replace("reservoirs <= 0 [regulated]", "unregulated [regulated]",
+                                                              regex=False)
+    meta = dict(source="nve", flow_label="Discharge", dataset="NVE HydAPI daily discharge (1001) + seNorge via GTS",
+                downloaded_stations=sorted(obs["gauge_id"].unique()))
+    return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)
 
-    By default the catchments are the CAMELS-CH selection from the last ``build`` (same 33 sites).
+
+def build_gldas(settings: TrendSettings | None = None, gauge_ids: list[str] | None = None,
+                save: bool = True, region: str | None = None) -> TrendResults:
+    """GLDAS-2.1 Noah runoff and drivers, area-weighted over the selected catchment outlines.
+
+    ``region`` "ch" uses the CAMELS-CH catchments, "no" the NVE catchments. By default the
+    catchments are the observed selection from the last ``build`` of that region.
     """
-    s = settings or TrendSettings.gldas()
-    root = camels_ch.find_dataset_root(s.raw_dir)
-    attrs = _standard_columns(camels_ch.load_attributes(root))
-    gauge_ids = gauge_ids or camels_selection()
-    weights = gldas.catchment_weights(root, gauge_ids)
+    region = region or (settings.region if settings else "ch")
+    s = settings or TrendSettings.gldas(region)
+    gauge_ids = gauge_ids or observed_selection(region)
+    attrs, weights = gldas_inputs(region, gauge_ids, s)
     obs, units = gldas.load_daily(weights, s.gldas_raw_dir)
     obs = _prepare(obs, s)
     completeness = preprocessing.year_completeness(obs, FLOW)
@@ -128,22 +148,39 @@ def build_gldas(settings: TrendSettings | None = None, gauge_ids: list[str] | No
     with_data = sorted(obs.loc[obs[FLOW].notna(), "gauge_id"].unique())
     gauges = [g for g in with_data if n_valid.get(g, 0) >= s.filters.min_valid_years]
     selection_log = pd.DataFrame([
-        ("CAMELS-CH mountain selection", len(gauge_ids)),
-        ("GLDAS runoff available", len(with_data)),
+        (f"{'NVE' if region == 'no' else 'CAMELS-CH'} mountain selection", len(gauge_ids)),
+        ("Catchment outline and GLDAS runoff available", len(with_data)),
         (f">= {s.filters.min_valid_years} years with >= {s.min_year_completeness:.0%} valid days", len(gauges)),
     ], columns=["step", "remaining"])
     meta = dict(
-        source="gldas", flow_label="GLDAS runoff", product=f"{gldas.COLLECTION} (GLDAS-2.1 Noah 0.25° 3-hourly)",
-        cells=weights.to_dict(orient="records"),
+        source="gldas", region=region, flow_label="GLDAS runoff",
+        product=f"{gldas.COLLECTION} (GLDAS-2.1 Noah 0.25° 3-hourly)", cells=weights.to_dict(orient="records"),
     )
     return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)
 
 
-def camels_selection(processed_dir: Path | None = None) -> list[str]:
-    meta_path = (processed_dir or TrendSettings().processed_dir) / "meta.json"
+def gldas_inputs(region: str, gauge_ids: list[str], s: TrendSettings) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(attributes, GLDAS cell weights) for the region's catchment outlines."""
+    if region == "no":
+        attrs = nve.load_stations(s.nve_raw_dir)
+        polygons, crs = nve.load_catchments(s.nve_raw_dir, gauge_ids)
+        return attrs, polygon_cell_weights(polygons, crs, resolution=0.25)
+    root = camels_ch.find_dataset_root(s.raw_dir)
+    return _standard_columns(camels_ch.load_attributes(root)), gldas.catchment_weights(root, gauge_ids)
+
+
+def observed_selection(region: str = "ch") -> list[str]:
+    """Selected gauges of the last observed build (CAMELS-CH for "ch", NVE for "no")."""
+    meta_path = TrendSettings.observed(region).processed_dir / "meta.json"
     if not meta_path.exists():
-        raise FileNotFoundError("No CAMELS-CH selection yet. Run `python -m mountain_water.trend build` first.")
+        cmd = "build --source nve" if region == "no" else "build"
+        raise FileNotFoundError(f"No observed selection for region '{region}' yet. Run `python -m mountain_water.trend {cmd}` first.")
     return list(json.loads(meta_path.read_text())["selected_gauges"])
+
+
+def camels_selection(processed_dir: Path | None = None) -> list[str]:
+    return observed_selection("ch") if processed_dir is None else \
+        list(json.loads((processed_dir / "meta.json").read_text())["selected_gauges"])
 
 
 def _prepare(obs: pd.DataFrame, s: TrendSettings) -> pd.DataFrame:
