@@ -10,7 +10,7 @@ python -m mountain_water.trend download        # Zenodo -> data/raw/camels_ch/v<
 python -m mountain_water.trend inspect         # list files, columns and units of the download
 python -m mountain_water.trend build           # -> data/processed/trend/*.parquet
 python -m mountain_water.trend report --gauge 2268 --gauge 2327   # -> data/exports/trend/*.html + *.csv
-python -m mountain_water.trend stations        # station x month heatmap -> data/exports/trend_stations
+python -m mountain_water.trend stations        # station x month heatmap, CH + NO -> data/exports/trend_stations
 python -m pytest                               # synthetic CAMELS-CH-shaped fixture
 ```
 
@@ -136,10 +136,12 @@ The automated tests (`python -m pytest`) use a small synthetic dataset with the 
 
 ## Station × month heatmap
 
-`python -m mountain_water.trend stations` (`stations.py`) shows three things in one figure: **when** in the year flow is changing, **whether the same pattern appears across catchments**, and **whether late-summer losses are larger than the change in annual supply**. It has its own selection and uses calendar years, separate from `build`:
+`python -m mountain_water.trend stations` (`stations.py`) shows three things in one figure: **when** in the year flow is changing, **whether the same pattern appears across catchments**, and **whether late-summer losses are larger than the change in annual supply**. It covers Switzerland and Norway in separate panels with the same columns. It has its own selections and uses calendar years, separate from `build`:
 
-- **Selection.** Swiss CAMELS-CH gauges (`country` CH) on rivers (`water_body_type` stream) with a valid, non-negative discharge on every day of 1981–2020 and some flow in every year. No gaps are filled. The gauges are ranked by mean catchment elevation (`elev_mean`) and the highest 100 are kept. There is **no reservoir filter**, and some catchments are nested. The `stations` table and the CSV carry glacier cover, reservoir and hydropower counts, so regulated gauges can be checked before their slopes are interpreted.
-- **Per gauge and calendar year:**
+- **Switzerland.** CAMELS-CH gauges in Switzerland (`country` CH) on rivers (`water_body_type` stream). Each needs a valid, non-negative discharge on every day of 1981–2020 and some flow in every year. They are ranked by mean catchment elevation (`elev_mean`), and the highest 100 are kept. There is **no reservoir filter**, and some catchments are nested.
+- **Norway.** The 84 gauges of the NVE mountain selection from the last `build --source nve` (median elevation ≥ 800 m, ≤ 500 km², unregulated), ranked by median catchment elevation. Discharge comes from the cached HydAPI download in `data/raw/nve`.
+- **Complete years.** A calendar year counts only if every day has a valid discharge. No gaps are filled, and the quality code is not filtered. A slope is estimated only for gauges with **≥ 30 complete years, ≥ 10 of them in 1981–2000**. The rest stay in the figure as grey rows and in the tables with empty slopes.
+- **Per gauge and complete year:**
   - monthly volume (hm³);
   - August–September volume;
   - annual volume;
@@ -149,32 +151,46 @@ The automated tests (`python -m pytest`) use a small synthetic dataset with the 
   29 February is left out, so every year has 365 days.
 - **Per gauge and value:**
   - Sen's slope per decade, as % of the gauge's 1981–2000 mean (the half-volume date in days, negative = earlier);
+  - the same slope in **mm of runoff per decade** over the catchment area (mm/d for the 7-day low), because a large % change in a low-flow month can be little water;
   - the Mann-Kendall p-value with trend-free pre-whitening;
-  - the Benjamini-Hochberg FDR per column.
+  - the Benjamini-Hochberg FDR per column, over all gauges with slopes.
 
-  ● in the figure marks p < 0.05 after FDR.
-- **Second figure** (`station_year_heatmaps`). The gauges are in the same order, with one column per year: August–September volume anomaly (left) and half-volume date anomaly (right), both relative to each gauge's 1981–2000 mean. It shows whether the slopes come from gradual shifts, a few dry years shared across the network, or an abrupt change at one gauge.
+  The colour shows the effect size. ● marks p < 0.05 after FDR, ▲ glacier cover > 0, ■ a recorded reservoir, hydropower plant or regulation.
+- **Year anomalies** (`station_year_heatmaps`). Same gauge order, one column per year: August–September volume anomaly and half-volume date anomaly, relative to each gauge's 1981–2000 mean. Grey cells are years without a complete record. It shows whether a slope comes from a gradual shift, a few shared dry years, or an abrupt change at one gauge.
+- **Driver scatters** (`driver_change_scatter`). One point per gauge with slopes, one panel per country, coloured by glacier cover. Both values are Sen's slopes fitted over the years where both exist, so differences in record length don't drive the comparison. Two pairs:
+  - **Half-volume date against snow-free date.** The snow-free date is the first day after the January–August SWE peak with SWE ≤ 5 % of the peak, from CAMELS-CH or seNorge SWE. Snowpacks with a peak below 10 mm get no date.
+  - **Aug–Sep 7-day low against July–September precipitation.** Both are in % of their mean over the fitted years.
 
-Options: `--n-gauges 100 --period 1981 2020 --baseline 1981 2000 --all-countries`. Outputs in `data/exports/trend_stations`:
-- `station_month_heatmap.html` and `station_year_heatmaps.html`;
-- `station_month_trends.csv` (wide, one row per gauge) and `station_month_trends_long.csv` (with p-values);
-- `station_month_summary.csv` (counts of negative and positive slopes, and the median, per column);
+  Pairs need ≥ 15 common years. CAMELS-CH SWE starts in 1998, so the Swiss snow comparison covers about 1999–2020.
+
+  Both SWE series drop to ~0 at the start of September; at gauge 2009, for example, SWE goes from 43 mm to 0 between 1 and 2 September 2010. That is a reset, not melt, so only melt-out before 1 September counts. Years with snow left on 31 August get no date, which leaves out most strongly glacierized catchments.
+
+Options: `--region all|ch|no` (default `all`; without an NVE build it falls back to Switzerland), `--n-gauges 100 --period 1981 2020 --baseline 1981 2000 --all-countries`. Outputs in `data/exports/trend_stations`:
+- `station_month_heatmap.html`, `station_year_heatmaps.html` and two `driver_*.html` files;
+- `station_month_trends.csv` (wide, one row per gauge, % and mm columns, record length) and `station_month_trends_long.csv` (with p-values);
+- `station_month_summary.csv` and `station_month_summary_by_infrastructure.csv` (per country and column: counts of negative and positive slopes, and the medians);
 - `station_year_anomalies.csv`;
+- `station_driver_changes.csv`;
 - `station_selection_log.csv`.
 
-**Run on CAMELS-CH v0.9 (2026-11-15):** 331 catchments → 229 in Switzerland → 196 rivers → 139 complete for 1981–2020 → the 100 highest kept. The lowest has a mean elevation of 986 m. The selection is the same as the exploratory script `plot_station_trends.py` this view was adapted from. All values match that script except February, annual volume and the half-volume date, which differ by at most 1.4 percentage points, 0.2 percentage points and 0.7 days because of leap-day handling. A gauge with whole years of zero flow (2079, Canale industriale at Le Prese) is excluded. Results:
+**Run on 2026-11-15** (CAMELS-CH v0.9 and the cached NVE download).
+- **Switzerland:** 331 catchments → 229 in Switzerland → 196 rivers → 139 complete for 1981–2020 → the 100 highest kept. All 100 have slopes. The lowest has a mean elevation of 986 m. The Swiss selection and values match the exploratory script `plot_station_trends.py` this view was adapted from. The exceptions are February, annual volume and the half-volume date, which differ by at most 1.4 percentage points, 0.2 percentage points and 0.7 days because of leap-day handling.
+- **Norway:** 84 gauges, 74 with slopes.
+- **Comparison with an exploratory figure made outside the repository:** it covers the same 184 gauges in the same order, and its slopes are identical wherever the complete-year counts agree. That is all 100 Swiss gauges and 48 of the Norwegian ones. For the other Norwegian gauges its NVE data had fewer complete years than our cached download (e.g. 156.19.0: 19 against 26), so it gave slopes for 73 Norwegian gauges instead of 74.
 
-| Value | Negative slope (of 100 gauges) | Median change per decade |
+| Value | Switzerland: negative slopes (of 100), median per decade | Norway: positive slopes (of 74), median per decade |
 | --- | --- | --- |
-| July volume | 97 | −7.1 % |
-| August volume | 62 | −1.1 % |
-| September volume | 93 | −5.3 % |
-| Aug–Sep volume | 87 | −3.9 % |
-| Annual volume | 87 | −2.4 % |
-| Aug–Sep 7-day low | 68 | −2.6 % |
-| Half-volume date | 74 earlier, 16 later | −1.1 days |
+| April volume | 50, +0.1 % (−0.0 mm) | 70, +14.6 % (+5.5 mm) |
+| July volume | 97, −7.1 % (−8.8 mm) | 25, −1.5 % (−4.2 mm) |
+| September volume | 93, −5.3 % (−4.5 mm) | 59, +5.4 % (+6.2 mm) |
+| Aug–Sep volume | 87, −3.9 % (−6.3 mm) | 52, +3.9 % (+9.4 mm) |
+| Annual volume | 87, −2.4 % (−22.0 mm) | 56, +2.2 % (+27.0 mm) |
+| Half-volume date | 74 earlier, −1.1 days | 36 earlier, 28 later, 0.0 days |
 
-These are descriptive slopes for one selection over one period. They are not a regional estimate and not attribution. Testing a second common period and adding uncertainty intervals that allow for year-to-year dependence are still open.
+- **Unflagged Swiss gauges.** The 42 Swiss gauges without a recorded reservoir or hydropower plant show the same summer pattern: July volume falls at 41, September at 38.
+- **Driver scatters, Spearman r across gauges.** Half-volume date against snow-free date: −0.10 for Switzerland (70 gauges, ~1999–2020) and −0.33 for Norway (61 gauges). Aug–Sep 7-day low against July–September precipitation: −0.03 for Switzerland (100 gauges) and +0.22 for Norway (74 gauges).
+
+These are descriptive slopes for two differently selected networks over one period. They are not regional estimates and not attribution. Still open: a second common period, uncertainty intervals that allow for year-to-year dependence, the 10 %/90 % delivery dates, and a MODIS snow-cover check of the snow timing after 2000.
 
 ## Interpretation limits
 

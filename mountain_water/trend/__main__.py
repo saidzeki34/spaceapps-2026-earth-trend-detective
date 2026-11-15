@@ -12,8 +12,8 @@ Norway, NVE (observed discharge + seNorge, 1961-latest); needs NVE_API_KEY:
     python -m mountain_water.trend build --source nve     # -> data/processed/trend_no
     python -m mountain_water.trend report --source nve    # -> data/exports/trend_no
 
-Station x month heatmap, the highest CAMELS-CH river gauges with complete records:
-    python -m mountain_water.trend stations [--n-gauges 100] [--period 1981 2020]  # -> data/exports/trend_stations
+Station x month heatmap: the highest CAMELS-CH river gauges and the NVE selection (calendar years):
+    python -m mountain_water.trend stations [--region all|ch|no] [--period 1981 2020]  # -> data/exports/trend_stations
 
 GLDAS-2.1 Noah (modelled, 2000-now) for either region's selection; needs EARTHDATA_TOKEN:
     python -m mountain_water.trend download --source gldas [--region no] [--probe]
@@ -127,23 +127,36 @@ def _report(args) -> None:
 
 
 def _stations(args) -> None:
-    s = StationNetworkSettings(n_gauges=args.n_gauges, first_year=args.period[0], last_year=args.period[1],
-                               baseline=tuple(args.baseline), country=None if args.all_countries else "CH")
+    regions = ("ch", "no") if args.region == "all" else (args.region,)
+    nve_selection = StationNetworkSettings().nve_selection_dir / "meta.json"
+    if args.region == "all" and not nve_selection.exists():
+        print(f"No NVE selection at {nve_selection} (run `build --source nve` first); "
+              "continuing with Switzerland only.")
+        regions = ("ch",)
+    s = StationNetworkSettings(regions=regions, n_gauges=args.n_gauges, first_year=args.period[0],
+                               last_year=args.period[1], baseline=tuple(args.baseline),
+                               country=None if args.all_countries else "CH")
     net = stations.build(s)
     out = Path(args.out or "data/exports/" + s.processed_dir.name)
     out.mkdir(parents=True, exist_ok=True)
     figures = {"station_month_heatmap": plots.station_month_heatmap(net),
                "station_year_heatmaps": plots.station_year_heatmaps(net)}
+    for flow, driver in stations.DRIVER_PAIRS:
+        if net.annual[driver].notna().any():
+            figures[f"driver_{flow}_vs_{driver}"] = plots.driver_change_scatter(net, flow, driver)
     for name, fig in figures.items():
         fig.write_html(out / f"{name}.html", include_plotlyjs="cdn")
     summary = stations.summary(net)
     tables = {"station_month_trends": stations.wide_table(net), "station_month_trends_long": net.trends,
-              "station_month_summary": summary, "station_year_anomalies": stations.year_anomalies(net),
-              "station_selection_log": net.selection_log}
+              "station_month_summary": summary,
+              "station_month_summary_by_infrastructure": stations.summary(net, by_infrastructure=True),
+              "station_year_anomalies": stations.year_anomalies(net),
+              "station_driver_changes": stations.driver_changes(net), "station_selection_log": net.selection_log}
     for name, table in tables.items():
         table.to_csv(out / f"{name}.csv", index=False, float_format="%.4g")
     print(net.selection_log.to_string(index=False))
-    print(summary[["label", "n_negative", "n_positive", "median_change_per_decade", "unit"]].to_string(index=False))
+    print(summary[["country", "label", "n_gauges", "n_negative", "n_positive", "median_change_per_decade", "unit"]]
+          .to_string(index=False))
     print(f"Wrote {len(figures)} figures and {len(tables)} tables to {out}")
 
 
@@ -228,7 +241,9 @@ def main(argv: list[str] | None = None) -> None:
     rp.add_argument("--gauge", action="append", help="Gauge id for single-catchment figures (repeatable)")
     rp.add_argument("--out", default=None, help="Output folder (default data/exports/<processed folder name>)")
 
-    st = sub.add_parser("stations", help="Station x month heatmap of the highest CAMELS-CH river gauges")
+    st = sub.add_parser("stations", help="Station x month heatmap: highest CAMELS-CH gauges and the NVE selection")
+    st.add_argument("--region", choices=["all", "ch", "no"], default="all",
+                    help="all = Switzerland and Norway (Norway needs `build --source nve`), ch or no alone")
     st.add_argument("--n-gauges", type=int, default=100, help="Number of gauges, highest mean elevation first")
     st.add_argument("--period", type=int, nargs=2, default=(1981, 2020), metavar=("FIRST", "LAST"),
                     help="Calendar years that must be complete (default 1981 2020)")
