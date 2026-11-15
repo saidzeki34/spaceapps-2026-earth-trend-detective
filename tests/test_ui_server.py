@@ -22,7 +22,10 @@ def http_app(monkeypatch):
     })
     monkeypatch.setattr(backend, "table", lambda query: {"columns": ["value"], "rows": [{"value": None}]})
     calls = []
-    monkeypatch.setattr(backend, "refresh", lambda: calls.append("refresh"))
+    def refresh():
+        calls.append("refresh")
+        return backend.catalogue()
+    monkeypatch.setattr(backend, "refresh", refresh)
     app = server.make_server(0)
     worker = threading.Thread(target=app.serve_forever, daemon=True)
     worker.start()
@@ -43,7 +46,7 @@ def test_missing_catalogue_and_refresh(http_app):
     assert item["status"] == "missing"
     assert item["gauges"] == []
     with urlopen(Request(base + "/api/refresh", data=b"", method="POST"), timeout=15) as response:
-        assert json.load(response) == {"ok": True}
+        assert json.load(response)["datasets"][0]["status"] == "missing"
     assert calls == ["refresh"]
 
 

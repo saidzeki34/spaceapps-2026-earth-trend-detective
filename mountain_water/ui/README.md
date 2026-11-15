@@ -21,7 +21,7 @@ The launcher opens a Chrome/Edge app window, or a browser tab when no app-window
 | Norwegian GLDAS | data/processed/trend_no_gldas | Modelled environmental/runoff context |
 | Station network | data/processed/trend_stations | Countries/stations actually included in that saved build |
 
-The source menu reports ready, missing or error from the files actually present. Missing sources show the corresponding backend command; follow the [trend guide](../trend/README.md) for credentials and prerequisites. Click **Reload saved data** after a build. No imaginary records substitute for missing products, stations, variables or model comparisons.
+The source menu reports ready, missing or error from the files actually present. Missing sources show the corresponding backend command; follow the [trend guide](../trend/README.md) for credentials and prerequisites. Click **Reload saved results** after a build. No imaginary records substitute for missing products, stations, variables or model comparisons.
 
 Catchment views include time series, historical hydrographs, seasonal regimes, annual metrics, daily heatmaps, window means, correlations and driver scatters. Regional views expose trend/window-change heatmaps, maps, attribute comparisons, attribution and selection. Station views expose month/year heatmaps and driver changes. Source comparisons require both observed and GLDAS outputs and retain their model/observation distinction. Tables and figures come from the existing backend. Reference periods, hydrological/calendar years, units, missing values and significance conventions are retained from it; associations do not establish causation.
 

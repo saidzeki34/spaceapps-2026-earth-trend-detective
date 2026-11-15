@@ -104,8 +104,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/refresh":
             from mountain_water.ui import backend
 
-            backend.refresh()
-            self._json({"ok": True})
+            self._json(backend.refresh())
         elif path == "/api/bye":
             if self.server.auto_exit:
                 self.server.closing_at = time.monotonic() + CLOSE_GRACE_SECONDS

@@ -36,7 +36,7 @@ python -m pytest
 
 The backend tests use synthetic fixtures and fake API responses. See [the trend guide](mountain_water/trend/README.md) for dataset download/build/report commands and Earthdata authentication. Live service access and scientific interpretation are separate from these checks.
 
-The UI reads saved outputs under data/processed: trend (Swiss), trend_no (Norway), trend_gldas / trend_no_gldas (GLDAS), and trend_stations (station network). The source menu reports what actually exists, including build commands for missing outputs. Nothing downloads on page load. After running a backend build, click **Reload saved data**. See [the trend guide](mountain_water/trend/README.md) for credentials and build details; credentials never belong in Git.
+The UI reads saved outputs under data/processed: trend (Swiss), trend_no (Norway), trend_gldas / trend_no_gldas (GLDAS), and trend_stations (station network). The source menu reports what actually exists, including build commands for missing outputs. Nothing downloads on page load. After running a backend build, click **Reload saved results**. See [the trend guide](mountain_water/trend/README.md) for credentials and build details; credentials never belong in Git.
 
 Plotly and Leaflet are served locally; there is no frontend build. Background map tiles require internet, but saved figures, tables, gauge points and cached river geometry work without them. River courses use actual OSM segments where a conservative match is available; unmatched gauges remain points. See [the map guide](mountain_water/ui/map_component/README.md). Root ExecuteProgram.py and streamlit_app.py remain empty.
 

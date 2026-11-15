@@ -22,4 +22,10 @@ Teammates must supply/build missing Norway and GLDAS outputs with their own cred
 
 ## Verification
 
-Validation results are recorded after implementation and browser checks. Synthetic test fixtures verify software behavior, not scientific findings. Local real-output checks read the existing saved files without modifying them.
+- 32 focused UI tests passed: saved-source availability/corruption, null handling, selection validation, source-comparison coverage, reload, HTTP routes, retired endpoints, static-file boundaries and conservative geometry matching. Synthetic fixtures validate software behavior, not scientific findings.
+- Read-only sweep of existing local outputs: all 14 Swiss noncomparison figure/table pairs and all three station pairs rendered. Missing Norway/GLDAS products returned unavailable states; successful model comparison and differing coverage were checked with synthetic fixtures.
+- Chromium browser checks covered real saved figures, station month/year heatmaps, station driver scatter, unavailable sources, multi-variable series, chart expansion, reload, pagination, mobile width and the rotatable labelled 3D surface. Deliberately failing reload cleared stale export state; the next reload recovered. No page/console/network errors were reported by the successful browser runs. Screenshots remain local in ignored tmp/ui-browser/.
+- Both authored JavaScript modules passed Node syntax checks; UI CLI help and git diff --check passed. No difference exists under mountain_water/trend or tests/trend versus the submitted main. The slow unchanged backend suite was not rerun for this UI task.
+- Independent assistant integration review found and resolved inaccurate comparison-period headers, a source-comparison map-selection transition, stale CSV state after failed reload, and a wide-table layout overflow. These checks do not constitute human scientific review.
+
+The local map display contains 22 matched river-segment features and 11 unavailable explanations for the selected CAMELS product. Gauge country and exact outlet coordinates retain their source metadata; the product includes neighboring-country gauges, so its 33 records are not all geographically inside Switzerland.

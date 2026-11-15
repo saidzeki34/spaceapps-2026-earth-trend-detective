@@ -279,7 +279,7 @@ const map = createMap($('#map'), (id) => {
   if (!(dataset()?.gauges || []).some((g) => String(g.id) === id)) return;
   state.gauge = id; $('#gauge-filter').value = '';
   renderGaugeOptions(); renderGaugeFacts(); updateMap();
-  if (selectedView()?.scope !== 'catchment') { state.view = 'timeseries'; renderViews(); renderOptions(); }
+  if (selectedView()?.scope !== 'catchment' && state.view !== 'source_regime') { state.view = 'timeseries'; renderViews(); renderOptions(); }
   setMode(false); refreshView();
 });
 
@@ -331,6 +331,7 @@ async function loadCatalogue(refresh = false) {
     $('#startup-error').hidden = false;
     $('#connection').textContent = 'Local server unavailable';
     showFigureStatus('Unable to load the catalogue', error.message);
+    showTableStatus('Catalogue unavailable. Reload saved results before exporting records.');
   } finally { $('#refresh').disabled = false; }
 }
 
