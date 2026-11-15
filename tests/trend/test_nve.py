@@ -34,7 +34,8 @@ class FakeNve:
             out.append({
                 "stationId": sid, "stationName": f"Testelv {sid}", "riverName": "Testelva",
                 "latitude": lat, "longitude": lon, "drainageBasinArea": area, "heightHypso50": elev,
-                "percentGlacier": 2.5, "reservoirVolumeIn": reg or None,
+                "percentGlacier": 2.5, "reservoirVolumeIn": 0, "numberReservoirs": 0,
+                "catchmentRegTypeName": "regulert m/magasinregulering" if reg else "uregulert",
                 "seriesList": [{"parameter": 1001, "parameterName": "Vannføring", "resolutionList": [
                     {"resTime": 0, "dataFromTime": f"{first}-01-01T00:00:00Z", "dataToTime": None},
                     {"resTime": 1440, "dataFromTime": f"{first}-01-01T00:00:00Z", "dataToTime": None}]}],
@@ -64,7 +65,7 @@ class FakeNve:
             x, y = to_utm.transform(lon, lat)
             h = (area * 1e6) ** 0.5 / 2
             ring = [[x - h, y - h], [x - h, y + h], [x + h, y + h], [x + h, y - h], [x - h, y - h]]
-            feats.append({"type": "Feature", "properties": {"STASJON_NR": pid, "AREAL_KM2": area},
+            feats.append({"type": "Feature", "properties": {"stasjonnr": pid, "nedborfeltaareal_km2": area},
                           "geometry": {"type": "Polygon", "coordinates": [ring]}})
         return {"type": "FeatureCollection", "features": feats}
 
@@ -101,6 +102,21 @@ def test_station_attributes_and_candidates():
     assert attrs.set_index("gauge_id").loc["2.11.0", "regulated"] == 0
     cands = nve.candidate_stations(attrs, 800, 500, 15, START, END)
     assert sorted(cands["gauge_id"]) == ["12.70.0", "2.11.0", "2.32.0"]
+
+
+def test_regulation_category_wins():
+    reg = nve._regulated({"catchmentRegTypeName": "regulert m/magasinregulering", "regulationArea": 0})
+    unreg = nve._regulated({"catchmentRegTypeName": "uregulert", "numberReservoirs": 2})
+    fallback = nve._regulated({"catchmentRegTypeName": "", "numberReservoirs": 2})
+    none = nve._regulated({"regulationArea": 0})
+    assert [reg[0], unreg[0], fallback[0], none[0]] == [1, 0, 1, 0]
+
+
+@pytest.mark.parametrize("value,area,key", [
+    ("2.11.0", None, (2, 11)), ("2.11", None, (2, 11)), ("002.00011.000", None, (2, 11)), ("11", "2", (2, 11)),
+    ("", None, None)])
+def test_station_key(value, area, key):
+    assert nve.station_key(value, area) == key
 
 
 def test_parse_discharge_uses_local_dates():

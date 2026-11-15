@@ -56,15 +56,15 @@ python -m mountain_water.trend report --source gldas --region no --gauge <id>
 | Data | Source | Notes |
 | --- | --- | --- |
 | Daily discharge | NVE HydAPI, parameter 1001, resolution 1440 | m³/s, dated in Norwegian local time. The quality code is kept. Specific discharge = Q × 86.4 / area |
-| Station metadata | HydAPI `/Stations` | `drainageBasinArea`, `heightHypso50` (median elevation), `percentGlacier`, regulation fields, and the daily-discharge period from `seriesList` |
-| Catchment outlines | NVE map service `HydrologiskeData3`, layer 38 "Totalnedbørfelt til målestasjon" (EPSG:25833) | Matched to stations by `STASJON_NR` (or `COMPOUND_K`); `2.11` also matches HydAPI's `2.11.0` |
+| Station metadata | HydAPI `/Stations` | `drainageBasinArea`, `heightHypso50` (median elevation), `percentGlacier`, `catchmentRegTypeName` plus the reservoir fields, and the daily-discharge period from `seriesList` (field names verified 2026-11-15) |
+| Catchment outlines | NVE map service `HydrologiskeData3`, layer 38 "Totalnedbørfelt til målestasjon" (EPSG:25833) | Matched to stations on (watercourse area, station number) from `stasjonnr` or `compoundkey12`, whichever matches more stations. Version suffix and zero padding are ignored (`2.11`, `2.11.0` and `002.00011.000` are the same station) |
 | Precipitation, temperature, SWE | seNorge 1 km grids via NVE GridTimeSeries (`AggregationTimeSeries/ByGeoJson`), themes `rr`, `tm`, `swe` | Averaged over each catchment polygon (simplified to 50 m), in 20-year requests, no key needed |
 
-**Filter** (`TrendSettings.nve()`): median catchment elevation ≥ 800 m, area ≤ 500 km², unregulated, ≥ 30 valid years. A station counts as regulated if any regulation or reservoir field in its metadata is > 0; missing fields count as "none recorded". The download step applies the same metadata filter first, so only candidate stations are fetched.
+**Filter** (`TrendSettings.nve()`): median catchment elevation ≥ 800 m, area ≤ 500 km², unregulated, ≥ 30 valid years. Regulation follows NVE's category `catchmentRegTypeName`: "uregulert" is kept; anything else containing "regulert" (e.g. "regulert m/magasinregulering") is excluded. Only stations without a category fall back to the numeric fields (any reservoir count, area or volume > 0 excludes). The category takes precedence because a regulated station can have every numeric regulation field at 0 (e.g. 1.200.0). The download step applies the same metadata filter first, so only candidate stations are fetched.
 
 **Period:** October 1960 to the latest complete hydrological year. Windows: 1961–1970, …, 2011–2020, plus 2021–latest (kept because it has ≥ 5 years). The overlap with GLDAS starts in 2001.
 
-**Not yet checked against the live services** (no network access in development): the HydAPI station field names, the outline layer's id field, the seNorge theme codes (especially `swe`) and the GTS response layout. `inspect --source nve` prints all four. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
+**Checked with `inspect --source nve` on 2026-11-15:** the HydAPI station fields, the outline layer's field names and the seNorge `rr` theme. **Still to confirm:** the `tm` and `swe` theme codes (`inspect` now lists them), the value format of the outline layer's `stasjonnr`, and the GTS aggregation response layout. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
 
 ## GLDAS-2.1 Noah (NASA)
 

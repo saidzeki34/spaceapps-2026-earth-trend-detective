@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
@@ -53,13 +54,17 @@ STATION_FIELDS = {
     "glacier": ("percentGlacier",),
     "lake": ("percentEffLake", "percentLake"),
 }
-# Any of these > 0 marks a station as regulated (reservoirs, regulated area or water transfers).
+# Regulation: NVE's category ``catchmentRegTypeName`` decides ("uregulert" = unregulated, anything
+# containing "regulert" = regulated, e.g. "regulert m/magasinregulering"). Only when it is empty do the
+# numeric fields count: any of these > 0 marks a station as regulated.
+REGULATION_TYPE_FIELD = "catchmentRegTypeName"
 REGULATION_FIELDS = (
     "regulationArea", "regulationPartReservoirs", "reservoirAreaIn", "reservoirAreaOut", "reservoirVolumeIn",
-    "reservoirVolumeOut", "transferAreaIn", "transferAreaOut", "reservoirCapacity", "totalReservoirVolume",
-    "volumeReservoirs",
+    "reservoirVolumeOut", "transferAreaIn", "transferAreaOut", "volumeReservoirs", "numberReservoirs",
+    "areaReservoirs",
 )
-POLYGON_ID_FIELDS = ("STASJON_NR", "stasjonNr", "COMPOUND_K", "STASJONNR", "stasjonsnr", "stationId")
+# Catchment layer id fields (matched case-insensitively; the best-matching one is used).
+POLYGON_ID_FIELDS = ("stasjonnr", "compoundkey12", "stasjon_nr", "compound_k", "stationid")
 
 
 def default_end() -> str:
@@ -173,11 +178,7 @@ def station_attributes(stations: list[dict]) -> pd.DataFrame:
         row = {k: v for k, v in rec.items() if not isinstance(v, (list, dict))}
         for col, cands in STATION_FIELDS.items():
             row[col] = _first(rec, cands)
-        found = [f for f in REGULATION_FIELDS if rec.get(f) is not None]
-        reg_values = pd.to_numeric(pd.Series([rec.get(f) for f in found], dtype="object"), errors="coerce")
-        # Missing regulation fields count as "no regulation recorded".
-        row["regulated"] = int((reg_values.fillna(0) > 0).any()) if found else 0
-        row["regulation_fields"] = ",".join(found)
+        row["regulated"], row["regulation_basis"] = _regulated(rec)
         q_from, q_to = _daily_discharge_period(rec)
         row["q_first_year"] = pd.Timestamp(q_from).year if q_from else np.nan
         row["q_last_year"] = pd.Timestamp(q_to).year if q_to else date.today().year
@@ -188,6 +189,19 @@ def station_attributes(stations: list[dict]) -> pd.DataFrame:
     for col in ("lat", "lon", "area", "elevation", "elevation_max", "glacier", "lake"):
         out[col] = pd.to_numeric(out[col], errors="coerce")
     return out
+
+
+def _regulated(rec: dict) -> tuple[int, str]:
+    reg_type = str(rec.get(REGULATION_TYPE_FIELD) or "").strip().lower()
+    if "uregul" in reg_type:
+        return 0, reg_type
+    if "regul" in reg_type:
+        return 1, reg_type
+    found = [f for f in REGULATION_FIELDS if rec.get(f) is not None]
+    values = pd.to_numeric(pd.Series([rec.get(f) for f in found], dtype="object"), errors="coerce").fillna(0)
+    hits = [f for f, v in zip(found, values) if v > 0]
+    # No category and no positive field: treated as unregulated ("none recorded").
+    return int(bool(hits)), "fields: " + ",".join(hits) if hits else "none recorded"
 
 
 def candidate_stations(attrs: pd.DataFrame, min_elevation: float | None, max_area: float | None,
@@ -208,39 +222,56 @@ def candidate_stations(attrs: pd.DataFrame, min_elevation: float | None, max_are
 # --------------------------------------------------------------------------- catchment polygons
 
 
-def _polygon_key(value) -> str:
-    s = str(value).strip()
-    return s[:-2] if s.endswith(".0") and s.count(".") == 1 else s  # numeric 12.0 -> "12"
+def station_key(value, area_no=None) -> tuple[int, int] | None:
+    """(watercourse area, station) from any id form: "2.11.0", "2.11", "002.00011.000" -> (2, 11).
+
+    A lone station number is combined with the watercourse area number when one is given.
+    """
+    if value is None:
+        return None
+    ints = [int(x) for x in re.findall(r"\d+", str(value))]
+    if len(ints) >= 2:
+        return ints[0], ints[1]
+    if len(ints) == 1 and area_no is not None:
+        area = re.findall(r"\d+", str(area_no))
+        return (int(area[0]), ints[0]) if area else None
+    return None
 
 
 def catchment_polygons(geojson: dict, gauge_ids: list[str] | None = None) -> tuple[dict, str]:
-    """{gauge_id: shapely geometry (EPSG:25833)}. Station ids are matched against candidate fields,
-    also accepting ids without the trailing version number ("2.11" for "2.11.0")."""
+    """{gauge_id: shapely geometry (EPSG:25833)}, matching HydAPI ids to the layer's station number on
+    (watercourse area, station), ignoring the version suffix and zero padding."""
     from shapely.geometry import shape
     from shapely.validation import make_valid
 
-    features = geojson.get("features", [])
+    features = [f for f in geojson.get("features", []) if f.get("geometry")]
     if not features:
         return {}, CRS
-    props = features[0].get("properties", {})
-    id_field = next((f for f in POLYGON_ID_FIELDS if f in props), None)
-    if id_field is None:
-        raise KeyError(f"No station id field in catchment layer; fields: {sorted(props)}")
-    by_key: dict[str, object] = {}
-    for f in features:
-        if f.get("geometry"):
+    lower = {k.lower(): k for k in features[0].get("properties", {})}
+    id_fields = [lower[c] for c in POLYGON_ID_FIELDS if c in lower]
+    if not id_fields:
+        raise KeyError(f"No station id field in catchment layer; fields: {sorted(lower.values())}")
+    area_field = lower.get("vassdragsomradenr")
+    wanted = {gid: station_key(gid) for gid in (gauge_ids or [])}
+
+    def index(field):
+        by_key: dict[tuple, object] = {}
+        for f in features:
+            props = f["properties"]
+            key = station_key(props.get(field), props.get(area_field) if area_field else None)
+            if key is None:
+                continue
             geom = make_valid(shape(f["geometry"]))
-            key = _polygon_key(f["properties"].get(id_field))
             if key not in by_key or geom.area > by_key[key].area:
                 by_key[key] = geom
-    wanted = gauge_ids if gauge_ids is not None else list(by_key)
-    out = {}
-    for gid in wanted:
-        for key in (gid, gid.rsplit(".", 1)[0] if gid.count(".") == 2 else gid):
-            if key in by_key:
-                out[gid] = by_key[key]
-                break
-    return out, CRS
+        return by_key
+
+    # Use the id field that matches the most requested stations.
+    indexed = [index(f) for f in id_fields]
+    best = max(indexed, key=lambda ix: sum(k in ix for k in wanted.values())) if wanted else indexed[0]
+    if gauge_ids is None:
+        return {f"{a}.{b}.0": g for (a, b), g in best.items()}, CRS
+    return {gid: best[key] for gid, key in wanted.items() if key in best}, CRS
 
 
 def rings(geom, tolerance: float = 50.0) -> list:
@@ -432,19 +463,26 @@ def describe(client: NveClient) -> str:
         found = {c: _first(sample, cands) is not None for c, cands in STATION_FIELDS.items()}
         lines.append(f"  standard fields found: {found}")
         lines.append(f"  regulation fields present: {[f for f in REGULATION_FIELDS if f in sample]}")
+        attrs = station_attributes(stations)
+        lines.append("  regulation categories: " + attrs["regulation_basis"].value_counts().head(8).to_string().replace("\n", "; "))
     except Exception as exc:  # noqa: BLE001 - show what works even if one service fails
         lines.append(f"HydAPI failed: {exc}")
     try:
         layer = client.catchment_fields()
         fields = [f.get("name") for f in layer.get("fields", [])]
-        attrs = (layer.get("features") or [{}])[0].get("attributes", {})
+        example = (layer.get("features") or [{}])[0].get("attributes", {})
         lines.append(f"Catchment layer fields: {fields}")
-        lines.append(f"  example: { {k: attrs.get(k) for k in POLYGON_ID_FIELDS if k in attrs} }")
+        lines.append(f"  example: {json.dumps(example, ensure_ascii=False)[:600]}")
     except Exception as exc:  # noqa: BLE001
         lines.append(f"Catchment layer failed: {exc}")
     try:
-        themes = client.themes()
-        lines.append(f"GTS themes: {json.dumps(themes)[:1500]}")
+        themes = {t.get("Name"): t for t in client.themes()}
+        lines.append(f"GTS themes ({len(themes)}): {', '.join(sorted(themes))}")
+        for name in THEMES:
+            t = themes.get(name)
+            lines.append(f"  {name}: " + (f"{t.get('Fullname')}, {t.get('HumanReadableUnit')}, "
+                                         f"{t.get('TimeResolutionInMinutes')} min, from {t.get('FirstDateInTimeSerie')}"
+                                         if t else "MISSING"))
     except Exception as exc:  # noqa: BLE001
         lines.append(f"GTS themes failed: {exc}")
     return "\n".join(lines)
