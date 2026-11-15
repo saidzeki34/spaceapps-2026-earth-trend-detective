@@ -1,6 +1,12 @@
 # Source and licence ledger
 
+On 2026-11-15, Anthropic Claude Code drafted the "Project Details" text for the event project page from this repository's documentation at main `5c88251`. The draft is submission text only, outside the repository; no code, data, scientific output or interface was changed. Its figures are quoted from the trend guide and project review and need team review before submission.
+
+On 2026-11-15, OpenAI Codex assisted removal of the assessment popup’s variability surface/heatmap and three-indicator plot, renamed its entry button and title to “Water availability assessment”, and shortened repetitive interface text. The year–month flow-history surface, remaining charts, scientific calculations, JSON export fields and essential limitations are preserved. This is a shared UI change for all gauges.
+
 Current SI-use disclosure: [description and media requirements](si-disclosure.md), [machine-readable scope](../mountain_water/si-use.json). On 2026-11-15, OpenAI Codex assisted replacement of the old generated mark with the user's hand-made `Drawing-3.sketchpad.webp`, copied byte-for-byte as `ui/web/logo.webp` (SHA-256 `42f129b867b389c2a3b233b53150e9cbccc20870d778415922d20fb33fafb6b5`). It also added visible code-use credit, API/build/export metadata, focused checks and removal of decorative comment separators. No observations were generated, no scientific calculation was changed, and the artwork was not edited or regenerated. Historical entries below retain their original scope.
+
+The subsequent UI review, also assisted by OpenAI Codex, added a persistent assessment Close header, synchronized same-tab river links with the displayed data, and corrected the combined station-network header to use its actual scope and period. No scientific formulas or saved observations changed.
 
 The original main skeleton contained no application data or runtime dependencies. The team integration now includes the source code and display assets recorded below. Inherited source records are preserved; merging them is not independent verification of their scientific or licence claims.
 

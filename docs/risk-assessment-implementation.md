@@ -8,7 +8,7 @@ ui-fixes-continuation branch is excluded. Original contributor history is preser
 ## Scope and methods
 
 The existing Risk assessment trend headline keeps its saved indicators and includes
-an Open water-flow assessment button opening an optional native dialog.
+a Water availability assessment button opening an optional native dialog.
 The local server injects /js/risk.js into its HTML response and exposes GET /api/risk.
 The dialog reuses the selected UI's existing dialog, results, typography and control
 styles. No catchment map or alternate interface theme is introduced. These historical
@@ -60,9 +60,9 @@ datasets into its data/processed directory or follow the trend build guide using
 your cached inputs. Never commit the datasets.
 
 Choose an occupation, Switzerland or Norway, an observed dataset and a river.
-In the Risk assessment headline, click Open water-flow assessment. Confirm the gauge, choose
-analysis and baseline years within coverage, and calculate. Rotate the 3D point,
-switch to 2D, inspect volume/timing/flow plots, add a threshold, inspect episodes
+In the Risk assessment headline, click Water availability assessment. Confirm the gauge, choose
+analysis and baseline years within coverage, and calculate. Inspect the
+volume/timing/flow plots, add a threshold, inspect episodes
 and export JSON. Test an empty baseline, short record and model dataset: these
 must show unavailable/partial states rather than invented coordinates. Close with
 Escape and reopen. Confirm original navigation and saved-result plots still work.
@@ -109,3 +109,27 @@ through GitHub. Existing NumPy, pandas, SciPy and Plotly dependencies are reused
 pytest provides tests. No new data source, credentials, deployment, service or
 dataset download was introduced. Perplexity prepared implementation and checks
 on 2026-11-15. The team must review methods and competition attribution.
+
+On 2026-11-15, a subsequent user-requested UI cleanup removed the variability
+surface/heatmap and three-indicator position plot from the popup for all rivers.
+The main flow-history surface and numerical assessment/export remain unchanged.
+The button and popup title now read Water availability assessment. Repetitive
+interface copy was shortened while retaining units, definitions and limitations.
+JavaScript syntax and existing screening assertions passed. Browser checks on
+Swiss gauge 2109 and Norwegian gauge 103.1.0 confirmed the remaining charts,
+close/reopen behavior and preserved flow-history surface, with no browser errors.
+
+The follow-up UI review fixed three mechanical issues: the assessment Close
+header now remains visible while scrolling; same-tab river-link changes update
+the screen and dismiss stale assessments; and combined station tabs use their
+actual network count, countries and period in the header. The year-month history
+surface, calculation code and export fields remain unchanged.
+
+Validation: 39 focused Python UI/server/risk tests passed. JavaScript syntax and
+screening assertions passed. Browser checks exercised invalid-year rejection and
+recovery, scenario export with SI metadata, occupation threshold reset, rescaling,
+results close/reopen and the retained history surface. HTTP 400 for the deliberate
+invalid-year case is expected. Desktop (1500 px), laptop (1024 px) and narrow
+(390 px) screenshots were inspected. Narrow cards remain dense, with no measured
+horizontal dialog overflow; this review is not a full accessibility or cross-browser
+audit. Scientific correctness is outside this UI check.
