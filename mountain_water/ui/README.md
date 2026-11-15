@@ -1,6 +1,6 @@
 # RivaScope interface
 
-Claude's submitted interface, connected to the team's trend backend. The occupation screen, Europe/country/river navigation, map-first layout, side controls, resizable results panel, timeline and original visual style are retained. Backend Plotly figures and inspectable tables occupy the existing results area. It reads saved outputs; opening or refreshing the page never downloads observations or runs a scientific build.
+The map-first front end of the team's trend backend. Flow: loading screen, occupation menu (first start only; the choice is saved and can be changed in the top bar), Europe map (Norway and Switzerland lit), country, river. It reads saved outputs only; opening or refreshing the page never downloads observations or runs a scientific build.
 
 ## Start
 
@@ -21,15 +21,34 @@ The launcher opens a Chrome/Edge app window, or a browser tab when no app-window
 | Norwegian GLDAS | data/processed/trend_no_gldas | Modelled environmental/runoff context |
 | Station network | data/processed/trend_stations | Countries/stations actually included in that saved build |
 
-Source choices in the existing sidebar report ready, missing or error from the files actually present. Missing sources show the corresponding backend command; follow the [trend guide](../trend/README.md) for credentials and prerequisites. Click **Reload saved results** after a build. No imaginary records substitute for missing products, stations, variables or model comparisons.
+Each source is reported as ready, not built or unreadable from the files actually present. A source that is not built shows the backend command that builds it; follow the [trend guide](../trend/README.md) for credentials and prerequisites. **Data → Reload saved results** re-reads the files after a build. No imaginary records substitute for missing products, stations, variables or model comparisons.
 
-Catchment views include time series, historical hydrographs, seasonal regimes, annual metrics, daily heatmaps, window means, correlations and driver scatters. Regional views expose trend/window-change heatmaps, maps, attribute comparisons, attribution and selection. Station views expose month/year heatmaps and driver changes. Source comparisons require both observed and GLDAS outputs and retain their model/observation distinction. Tables and figures come from the existing backend. Reference periods, hydrological/calendar years, units, missing values and significance conventions are retained from it; associations do not establish causation.
+## Screens
 
-The map shows gauge points and actual cached OpenStreetMap river segments where a conservative match exists. A missing course remains a point, with an explanation. Course geometry is display context, not a delineated upstream network or a calculation boundary. See [map sources and limits](map_component/README.md).
+- **Country.** The left box lists the saved gauged rivers; the results box compares them (trend and window-change heatmaps, trend against catchment attribute, attribution, selection) and shows the station network (station/month, station/year, driver changes) when that build includes the country.
+- **River.** The left box holds the reference and water-availability variables (up to four, drawn on one graph with one colour-coded axis per variable), the assessments and the calculation step (monthly average or daily). A ticked variable with no saved value in the chosen year stays in the legend as "no data" and is named under the graph. Every ticked assessment adds its figures under the graph:
+  - *Risk assessment*: the saved Sen's slope and Mann-Kendall result for annual volume, half-volume date and daily-flow CV, a table of the saved indicators the chosen occupation reads first (`OCCUPATIONS` in `web/js/main.js`; these lists need review by the risk-assessment owner), and the flow surface.
+  - *Statistics*: annual metric with trend, 10-year window means.
+  - *Seasonal regime*: year against history, regime by window, daily flow of all years.
+  - *Drivers*: driver correlations, flow against driver.
+- **Timeline.** Under the map; drag or use the arrow keys to pick a saved hydrological year. The forecast slot is shown as unavailable: no forecast model is connected.
+- Every figure has **Table** (the saved records behind it, paged), **CSV** (all of those records) and **Full** (full screen; Esc closes). **Expand** hides the map; the divider between map and results can be dragged.
 
-## Incomplete sections
+Figures and numbers come from the existing backend (`mountain_water.trend.plots`, `stations` and the saved tables). Reference periods, hydrological/calendar years, units, missing values and significance conventions are kept from it; associations do not establish causation. The interface changes only typography and line colours of the backend figures. Not shown: the backend's trend map (it needs a base-map file from an external server, and the satellite map already shows the gauges) and the observed-against-GLDAS comparison figures (removed at the owner's request; a saved GLDAS build can still be opened as a source).
 
-Risk assessment, occupational requirements, forecasts and the team's physics model are not implemented. Their former fabricated values have been removed from the active UI. The optional **volatility surface demonstration** is explicitly synthetic, with arbitrary axes/values; it illustrates 3D interaction and does not use a station's results or estimate risk.
+The **flow surface** is the grid of the backend's daily heatmap drawn in 3D: day of the hydrological year × year × saved daily discharge, with the year chosen on the timeline highlighted. Nothing is smoothed or estimated.
+
+**No imaginary values.** The interface holds no synthetic, demonstration, random or hard-coded data. One kind of non-recorded number exists in the saved results themselves: the trend section interpolates discharge gaps of up to 5 days before computing its yearly statistics and flags those days (`discharge_vol_filled`). The four graphs of daily records (time series, flow surface, year against history, daily flow of all years) leave those days out and say how many; the record tables keep them with their flag. The saved yearly metrics, trends, regimes and window comparisons were computed by the trend section with those days included; changing that is a backend build setting (`max_gap_fill_days`).
+
+The map shows gauge points and cached OpenStreetMap river segments where a conservative match exists. A missing course remains a point. Course geometry is display context, not a delineated upstream network or a calculation boundary. See [map sources and limits](map_component/README.md).
+
+## Not implemented
+
+Requirements, risk scores and forecasts are not implemented, and none are invented. The occupation only selects which saved trend rows the risk assessment lists.
+
+## Look
+
+One typeface (DIN; Bahnschrift on Windows, DIN Alternate on macOS, Arial elsewhere), black instrument panels, a white results plate, one signal colour (international orange) for selection and the chosen year. Squares and 1px rules; no shadows, rounded corners, icons or third-party branding. Headings, numbers and paddings inside a box follow that box's width, so dragging the divider or expanding rescales them. The design tokens are at the top of `web/styles.css`; series colours are in `SERIES` in `web/js/main.js`.
 
 ## Files and API
 
@@ -40,11 +59,11 @@ Risk assessment, occupational requirements, forecasts and the team's physics mod
 | backend.py | Saved-result catalogue, allowlisted backend figures/tables, refresh |
 | river_geometry.py | Cached course lookup with match validation and attribution |
 | risk_view.py, prediction_view.py | Explicitly unfinished placeholders |
-| web/index.html, styles.css, js/ | Controls, map, figures and table presentation |
+| web/index.html, styles.css, js/ | Screens, map, figures and table presentation |
 | web/vendor/leaflet/ | Leaflet 1.9.4 and licence |
 | web/data/ | Display geometry with attribution |
 | map_component/ | Reproducible geometry tools and provenance |
 
 `GET /api/catalog` lists datasets, available options and views. `GET /api/figure` and `/api/table` accept allowlisted selection parameters. `GET /api/courses?dataset=ch` returns verified course segments and unmatched explanations. `POST /api/refresh` clears saved-result caches. `/vendor/plotly.min.js` serves the runtime from the installed Plotly package, keeping it compatible with the Python figures. No CDN or frontend build is required for charts. Map background tiles need internet; saved figures and cached geometry do not.
 
-Old bootstrap/rivers/outlines/view routes and their synthetic data generators have been retired. The original UI remains preserved on archive/ui-handoff-20261115; the subsequent industrial redesign remains on feature/industrial-results-ui. The current interface restores the former appearance while retaining the real-data adapter. Occupation choices are context only and do not introduce requirements or risk scores.
+Earlier interfaces remain preserved: the first web UI on archive/ui-handoff-20261115 and the industrial redesign on feature/industrial-results-ui.

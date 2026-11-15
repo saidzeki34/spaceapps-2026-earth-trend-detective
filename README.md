@@ -8,6 +8,8 @@ The project direction is to investigate mountain-catchment water availability in
 
 Read the [project brief](docs/project-brief.md), [module responsibilities](docs/architecture.md), [interface planning notes](docs/data-contracts.md) and [contribution workflow](CONTRIBUTING.md). Existing research notes remain reference material, not implemented capabilities.
 
+The [selective unification handoff](docs/selective-unification.md) records the current selected UI, preserved versions and branches still awaiting submission.
+
 ## Main sections
 
 | Folder under mountain_water/ | Planned scope | Timing |

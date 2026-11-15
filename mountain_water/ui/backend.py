@@ -5,8 +5,10 @@ Scientific calculations and figures remain owned by ``mountain_water.trend``.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +48,7 @@ VIEW_SPECS = (
     ("window_means", "Window means", "catchment", "window_comparison", ("metric",)),
     ("correlation_matrix", "Driver correlations", "catchment", "correlations", ()),
     ("driver_scatter", "Flow against driver", "catchment", "correlations", ("metric", "driver")),
+    ("flow_surface", "Flow surface", "catchment", "daily", ("year",)),
     ("trend_heatmap", "Catchment trend heatmap", "region", "trends", ("kind",)),
     ("window_change_heatmap", "Window change heatmap", "region", "window_comparison", ("metric",)),
     ("trend_map", "Catchment trend map", "region", "trends", ("metric",)),
@@ -263,11 +266,33 @@ class Backend:
         if daily.empty: raise ValueError("No saved data for this gauge and hydrological year")
         return daily
 
+    @staticmethod
+    def _observed_only(frame):
+        """Blank the values the trend section interpolated across short gaps (its ``*_filled`` flags).
+
+        Graphs of daily records then draw recorded values only; an interpolated day shows as a gap.
+        Returns (copy, {column: number of blanked days}). The saved tables are never changed.
+        """
+        frame, blanked = frame.copy(), {}
+        for flag in [c for c in frame.columns if c.endswith("_filled")]:
+            column = flag[: -len("_filled")]
+            if column not in frame: continue
+            mask = frame[flag].fillna(False).astype(bool) & frame[column].notna()
+            blanked[column] = int(mask.sum())
+            frame.loc[mask, column] = np.nan
+        return frame, blanked
+
+    def _observed_gauge(self, result, gauge):
+        """The saved results with one gauge's interpolated days blanked, for the backend's daily-record figures."""
+        daily, blanked = self._observed_only(result.daily[result.daily.gauge_id == gauge])
+        return replace(result, daily=daily), blanked.get("discharge_vol", 0)
+
     def _timeseries(self, result, gauge, query):
-        daily = self._daily(result, gauge, query)
+        daily, blanked = self._observed_only(self._daily(result, gauge, query))
         variables = str(query.get("variables") or query.get("variable") or "discharge_vol").split(",")
         if not 1 <= len(variables) <= 4: raise ValueError("Choose one to four variables")
         if any(v not in VARIABLE_LABELS or v not in daily for v in variables): raise ValueError("Variable not available in this dataset")
+        hidden = max([blanked.get(v, 0) for v in variables] or [0])  # days, not values: the flow columns share them
         if not any(daily[v].notna().any() for v in variables): raise ValueError("No values for the selected variables and year")
         interval = query.get("interval", "daily")
         if interval not in ("daily", "monthly"): raise ValueError("Unknown time interval")
@@ -286,7 +311,50 @@ class Backend:
                             position={1: .9, 2: .04, 3: 1}[i], showgrid=False)
             fig.update_layout(**{"yaxis" if i == 0 else f"yaxis{i+1}": axis})
         fig.update_layout(xaxis=dict(domain=[.13 if len(variables)>2 else 0, .85 if len(variables)>1 else 1]),
-                          hovermode="x unified", title=f"{gauge} / {query.get('year') or result.annual.hydro_year.max()} / {interval}")
+                          hovermode="x unified", title=f"{gauge} / {query.get('year') or result.annual.hydro_year.max()} / {interval}",
+                          # For the page: which chosen variables have no value in this year, and how many
+                          # interpolated days were left out of the lines.
+                          meta=dict(empty_variables=[v for v in variables if not daily[v].notna().any()],
+                                    interpolated_days_hidden=hidden))
+        return fig
+
+    def _flow_surface(self, result, gauge, query):
+        """The saved daily discharge as a surface: day of the hydrological year x year x flow.
+
+        This is the grid of the backend's daily heatmap shown in 3D. Values are the saved daily
+        records. Nothing is smoothed or estimated here; days the trend section interpolated
+        (its ``discharge_vol_filled`` flag) are left out, so every gap stays a gap.
+        """
+        daily = result.daily[(result.daily.gauge_id == gauge) & (result.daily.hydro_doy <= 365)]
+        daily, blanked = self._observed_only(daily)
+        hidden = blanked.get("discharge_vol", 0)
+        grid = daily.pivot_table(index="hydro_year", columns="hydro_doy", values="discharge_vol")
+        if grid.empty: raise ValueError("No saved discharge for this gauge")
+        # A pivot drops entirely missing days/years. Keep their coordinates so
+        # the surface cannot join observations across an unobserved interval.
+        grid = grid.reindex(index=range(int(daily.hydro_year.min()), int(daily.hydro_year.max()) + 1),
+                            columns=range(1, 366))
+        start = int(result.meta.get("settings", {}).get("hydro_year_start_month") or 10)
+        months = [(start - 1 + i) % 12 + 1 for i in range(12)]
+        firsts = np.cumsum([0] + [calendar.monthrange(2001, m)[1] for m in months[:-1]]) + 1
+        unit = result.meta.get("units", {}).get("discharge_vol", "")
+        label = "GLDAS runoff" if result.meta.get("source") == "gldas" else "Discharge"
+        fig = go.Figure(go.Surface(
+            x=grid.columns.to_numpy(), y=grid.index.to_numpy(), z=grid.to_numpy(), showscale=False, connectgaps=False,
+            contours=dict(z=dict(show=True, usecolormap=True, project=dict(z=True))),
+            hovertemplate="Day %{x} of hydrological year %{y}: %{z:.2f} " + unit + "<extra></extra>"))
+        year = query.get("year")
+        if year and str(year).isdigit() and int(year) in grid.index:
+            fig.add_trace(go.Scatter3d(x=grid.columns.to_numpy(), y=[int(year)] * grid.shape[1], z=grid.loc[int(year)].to_numpy(),
+                                       mode="lines", line=dict(width=6), name=f"Hydrological year {int(year)}",
+                                       connectgaps=False, hoverinfo="skip"))
+        fig.update_layout(
+            title=f"{gauge} / flow surface", height=540, showlegend=False, margin=dict(l=0, r=0, t=10, b=0),
+            meta=dict(interpolated_days_hidden=hidden),
+            scene=dict(xaxis=dict(title="Day of hydrological year", tickvals=firsts.tolist(),
+                                  ticktext=[calendar.month_abbr[m] for m in months]),
+                       yaxis=dict(title="Hydrological year"), zaxis=dict(title=f"{label} [{unit}]"),
+                       camera=dict(eye=dict(x=-1.45, y=-1.75, z=0.95)), aspectratio=dict(x=1.5, y=1.7, z=0.62)))
         return fig
 
     @staticmethod
@@ -338,11 +406,17 @@ class Backend:
                     context = self._source_context(context, comparison[comparison.metric == metric], which)
                     fig = getattr(plots, view)(comparison, obs, metric, theme=theme)
             elif view == "timeseries": fig = self._timeseries(result, gauge, query)
+            elif view == "flow_surface": fig = self._flow_surface(result, gauge, query)
             elif view == "hydrograph_vs_history":
                 daily = self._daily(result, gauge, query)
-                fig = plots.hydrograph_vs_history(result, gauge, int(daily.hydro_year.iloc[0]), theme=theme)
+                observed, hidden = self._observed_gauge(result, gauge)
+                fig = plots.hydrograph_vs_history(observed, gauge, int(daily.hydro_year.iloc[0]), theme=theme)
+                fig.update_layout(meta=dict(interpolated_days_hidden=hidden))
             elif view == "regime_by_window": fig = plots.regime_by_window(result, gauge, normalized=query.get("normalized") == "true", theme=theme)
-            elif view == "daily_heatmap": fig = plots.daily_heatmap(result, gauge, log_scale=query.get("log_scale", "true") == "true", theme=theme)
+            elif view == "daily_heatmap":
+                observed, hidden = self._observed_gauge(result, gauge)
+                fig = plots.daily_heatmap(observed, gauge, log_scale=query.get("log_scale", "true") == "true", theme=theme)
+                fig.update_layout(meta=dict(interpolated_days_hidden=hidden))
             elif view in ("annual_metric", "window_means"): fig = getattr(plots, view)(result, gauge, metric, theme=theme)
             elif view == "correlation_matrix": fig = plots.correlation_matrix(result, gauge, theme=theme)
             elif view == "driver_scatter":
@@ -389,7 +463,7 @@ class Backend:
                 if name not in functions: raise ValueError("Unknown station table")
                 frame = functions[name]()
             elif name == "daily":
-                frame = result.daily[result.daily.gauge_id == gauge] if view == "daily_heatmap" else self._daily(result, gauge, query)
+                frame = result.daily[result.daily.gauge_id == gauge] if view in ("daily_heatmap", "flow_surface") else self._daily(result, gauge, query)
             elif name == "regime_monthly": frame = plots.monthly_regime_table(result, gauge).reset_index()
             elif name in pipeline.TABLES:
                 frame = getattr(result, name)
