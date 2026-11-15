@@ -111,6 +111,42 @@ def test_empty_saved_selection_reports_no_data(saved_backend):
     assert "no selected gauges" in response["message"]
 
 
+def test_source_mean_coverage_uses_valid_pairs_not_full_dataset(saved_backend, monkeypatch):
+    backend, observed = saved_backend
+    observed.annual = pd.DataFrame(dict(gauge_id="A", hydro_year=np.arange(2000, 2018),
+                                       mean_flow=np.arange(1., 19.)))
+    model_annual = observed.annual[observed.annual.hydro_year.between(2004, 2015)].copy()
+    model_annual.loc[model_annual.hydro_year == 2004, "mean_flow"] = np.nan
+    model = replace(observed, annual=model_annual, meta=dict(observed.meta, source="gldas"))
+    monkeypatch.setattr(backend, "_paired", lambda dataset: (observed, model, None))
+    query = {"view": "source_scatter", "metric": "mean_flow", "gauge": "A"}
+    response, table = backend.figure(query), backend.table(query)
+    assert response["status"] == table["status"] == "ready"
+    assert response["context"]["period"] == table["context"]["period"] == "2005–2015"
+    assert table["rows"][0]["n_years"] == 11
+    assert "common hydrological years" in response["context"]["calendar"]
+    trend = backend.figure(dict(query, view="source_trend_scatter"))
+    assert trend["status"] == "ready"
+    assert trend["context"]["period"] == "Common saved years"
+    assert trend["context"]["calendar"] == "valid coverage varies by gauge/metric"
+
+
+def test_source_regime_coverage_comes_from_backend_years(saved_backend, monkeypatch):
+    backend, observed = saved_backend
+    observed.annual = pd.DataFrame(dict(gauge_id="A", hydro_year=[2010, 2020], mean_flow=[1., 2.]))
+    model = replace(observed, annual=pd.DataFrame(dict(gauge_id="A", hydro_year=[2019, 2020], mean_flow=[1., 2.])),
+                    meta=dict(observed.meta, source="gldas"))
+    monkeypatch.setattr(backend, "_paired", lambda dataset: (observed, model, None))
+    query = {"view": "source_regime", "gauge": "A"}
+    for response in (backend.figure(query), backend.table(query)):
+        assert response["status"] == "ready"
+        assert response["context"]["period"] == "2020–2020"
+        assert response["context"]["calendar"] == "common hydrological years"
+    model.annual = model.annual[model.annual.hydro_year == 2019]
+    assert backend.figure(query)["status"] == "missing"
+    assert backend.table(query)["status"] == "missing"
+
+
 @pytest.mark.parametrize("query", [
     {"dataset": "../raw"}, {"gauge": "UNSELECTED"}, {"view": "download"},
     {"variable": "invented"}, {"year": "2050"}, {"interval": "future"},

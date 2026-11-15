@@ -240,6 +240,22 @@ class Backend:
                 self._comparisons[key] = (sources.compare_trends if which == "trends" else sources.compare_annual)(obs, model, metrics=metrics)
             return self._comparisons[key]
 
+    @staticmethod
+    def _source_context(context, comparison, kind):
+        """Describe coverage reported by the backend, without refitting its results."""
+        context = dict(context)
+        context["source"] = "NVE + seNorge / GLDAS-2.1" if context["dataset"].startswith("no") else "CAMELS-CH / GLDAS-2.1"
+        context["period"] = "Common saved years"
+        context["calendar"] = "valid coverage varies by gauge/metric"
+        if kind == "regime":
+            years = comparison.attrs.get("years")
+            if years:
+                context.update(period=f"{years[0]}–{years[1]}", calendar="common hydrological years")
+        elif kind == "annual" and not comparison.empty:
+            context.update(period=f"{int(comparison.first_year.min())}–{int(comparison.last_year.max())}",
+                           calendar="common hydrological years; valid coverage varies by gauge/metric")
+        return context
+
     def _daily(self, result, gauge, query):
         daily = result.daily[result.daily.gauge_id == gauge].copy()
         year = int(query.get("year") or daily.hydro_year.max())
@@ -310,12 +326,16 @@ class Backend:
                 notes.append(MODEL_NOTE)
                 if view == "source_regime":
                     if gauge not in obs.gauges or gauge not in model.gauges: return dict(status="missing", message="This gauge has no matching observed / GLDAS results.")
+                    regime = sources.regime_pair(obs, model, gauge)
+                    if not regime.attrs.get("years"): return dict(status="missing", message="This gauge has no common observed / GLDAS years.")
+                    context = self._source_context(context, regime, "regime")
                     fig = plots.source_regime(obs, model, gauge, theme=theme)
                     fig.data[0].name = "Observed discharge (NVE)" if dataset.startswith("no") else "Observed discharge (CAMELS-CH)"
                 else:
                     which = "trends" if view == "source_trend_scatter" else "annual"
                     comparison = self._comparison(dataset, obs, model, which)
                     if comparison.empty or not (comparison.metric == metric).any(): return dict(status="missing", message="Insufficient common years for this metric.")
+                    context = self._source_context(context, comparison[comparison.metric == metric], which)
                     fig = getattr(plots, view)(comparison, obs, metric, theme=theme)
             elif view == "timeseries": fig = self._timeseries(result, gauge, query)
             elif view == "hydrograph_vs_history":
@@ -376,6 +396,11 @@ class Backend:
                 if spec["scope"] == "catchment" and "gauge_id" in frame: frame = frame[frame.gauge_id == gauge]
             else: raise ValueError("Unknown table")
             if query.get("metric") and "metric" in frame: frame = frame[frame.metric == query["metric"]]
+            if name.startswith("source_"):
+                kind = name.removeprefix("source_")
+                if kind == "regime" and not frame.attrs.get("years"):
+                    return dict(status="missing", message="This gauge has no common observed / GLDAS years.")
+                context = self._source_context(context, frame, kind)
             rows = json.loads(frame.to_json(orient="records", date_format="iso"))
             return dict(status="ready", columns=list(frame.columns), rows=rows, context=_clean(context),
                         notes=[STATION_NOTE if dataset == "stations" else TREND_NOTE])
