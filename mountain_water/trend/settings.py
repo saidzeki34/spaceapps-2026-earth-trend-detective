@@ -79,13 +79,19 @@ class TrendSettings:
 
 @dataclass
 class StationNetworkSettings:
-    """Station x month view: the highest river gauges with a complete daily record over one common period.
+    """Station x month view over one common period of calendar years (Jan-Dec).
 
-    Calendar years (Jan-Dec), so the month columns run January to December. Slopes are expressed
-    relative to the mean over ``baseline``. ``None`` disables the country / water body filter.
+    ``regions``: "ch" = the ``n_gauges`` highest CAMELS-CH river gauges with a complete record over
+    the whole period (``country`` / ``water_body_type`` filter; ``None`` disables it); "no" = the NVE
+    selection of the last ``build --source nve``. Slopes are relative to the mean over ``baseline`` and
+    are only estimated for gauges with >= ``min_complete_years`` complete years, >= ``min_baseline_years``
+    of them in the baseline.
     """
 
+    regions: tuple[str, ...] = ("ch", "no")
     raw_dir: Path = Path("data/raw/camels_ch")
+    nve_raw_dir: Path = Path("data/raw/nve")
+    nve_selection_dir: Path = Path("data/processed/trend_no")  # meta.json of the last `build --source nve`
     processed_dir: Path = Path("data/processed/trend_stations")
     n_gauges: int = 100
     first_year: int = 1981
@@ -93,9 +99,17 @@ class StationNetworkSettings:
     baseline: tuple[int, int] = (1981, 2000)
     country: str | None = "CH"
     water_body_type: str | None = "stream"
+    min_complete_years: int = 30
+    min_baseline_years: int = 10
+    # Driver comparison: snowpacks below this peak SWE get no snow-free date; slopes need this many paired years.
+    min_peak_swe_mm: float = 10.0
+    min_paired_years: int = 15
     alpha: float = 0.05
 
     def __post_init__(self) -> None:
         self.baseline = tuple(int(y) for y in self.baseline)
+        self.regions = tuple(self.regions)
         if not self.first_year <= self.baseline[0] <= self.baseline[1] <= self.last_year:
             raise ValueError(f"Baseline {self.baseline} must lie within {self.first_year}-{self.last_year}")
+        if not set(self.regions) <= {"ch", "no"} or not self.regions:
+            raise ValueError(f"regions must be 'ch' and/or 'no', got {self.regions}")
