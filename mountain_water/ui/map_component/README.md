@@ -72,24 +72,63 @@ after it.
 ## Gauged mountain rivers
 
 `build_gauge_courses.py` reads existing gauge metadata and cached OpenStreetMap
-ways. Its optional `--fetch` switch makes one bounded query for river/stream
-ways within 1.5 km of at most 40 gauges; it never requests observations. The
-application itself makes no geometry downloads. Query results stay in an
-ignored cache; only selected display segments are distributed.
+ways. `--fetch` queries river/stream ways within 1.5 km of each gauge in batches
+of 30. An optional `--network-bbox SOUTH WEST NORTH EAST` fetches a small,
+explicit map area, including tributaries. Queries are cached; failures or
+incomplete responses are not accepted. The application never downloads geometry.
 
-Matching requires a normalized provider river name or its explicit alias,
-a source segment within 150 m of the measuring point, and connected original
-OpenStreetMap vertices. Conflicting nearby components are rejected. No line
-is invented between disconnected pieces. The file records source way IDs,
-OpenStreetMap base timestamps and retrieval timestamps where known; an
-inherited cache without a retrieval timestamp is not given an invented date.
+Course anchors normally require a normalized provider name or an explicit
+source alias within 150 m of the gauge. Parallel source-language names such as
+`Inn / En` are recognized. NVE sometimes supplies a drainage-system name in
+place of the local channel name: Norway may also use a channel within 25 m
+when no competing disconnected channel is that close. Such features are
+labelled `station_position_only`, retain the original provider name, and have
+an explanatory tooltip. This is a display match, not a hydrological validation.
+
+Connected source vertices retain branches. Upstream tributaries are followed
+using OSM's downstream way orientation, without reversing or joining vertices.
+Names from every included source way remain in the feature metadata. Explicit
+waterway relations can identify unnamed main/side channel sections and separate
+sections across a lake. Disconnected sections remain separate lines: no straight
+connector is invented, and mapped endpoints are never claimed to be a verified
+spring or mouth. Coverage stops at missing topology or the cached source extent.
+
+The runtime reader rechecks provider identity, names and coordinates. Position-only
+matches retain the stricter 25 m limit. Tooltips show the gauge's coordinates and
+coverage limits. Overlapping gauge courses draw the selected course last, so its
+highlight and click target remain visible. Administrative borders have no hover
+fill and are subdued; the UI layout, colours, typography and panels are unchanged.
+
+### Geometry refresh on 2026-11-15
+
+The user's river-fix request authorized a public map-geometry refresh. Six
+successful Overpass responses were cached between 11:25:33 and 11:32:17 UTC:
+four batches around 117 saved gauges, the Lütschine relation (`17935338`), and
+river/stream ways in the Lütschine area bounded by south 46.42, west 7.78,
+north 46.70, east 8.13. OSM base timestamps span 11:23:55 to 11:31:01 UTC.
+Existing cached source data was reused, with newer source timestamps preferred.
+Several broader extension attempts returned incomplete responses and were not
+cached or used. No observation datasets or credentials were sent.
+
+The refreshed bundle contains courses for **77 of 117 gauges**: 23 from the
+Swiss selection (21 in Switzerland and two in France), plus 54 in Norway.
+All 22 previously available courses remain represented. Fifty-two matches use
+provider names and position; 25 Norwegian matches use the explicit position-only
+rule. Forty stations remain points with an unavailable reason. Lütschine at
+Gsteig (`2109`) now includes both Weisse and Schwarze Lütschine and the mapped
+upstream branches, using original vertices rather than stopping at their
+confluence. This is still partial map coverage, not a complete source-to-mouth
+or catchment delineation. Source way IDs, relation IDs, names, base timestamps
+and retrieval times are retained in the GeoJSON properties.
 
 The bundled geometry is derived from OpenStreetMap and distributed under the
 [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/).
 Keep visible [OpenStreetMap attribution](https://www.openstreetmap.org/copyright)
 on maps. OpenStreetMap documents
 [`waterway=river`](https://wiki.openstreetmap.org/wiki/Tag:waterway%3Driver)
-as the linear river course. Its
+as a downstream-oriented linear course, and
+[waterway relations](https://wiki.openstreetmap.org/wiki/Relation:waterway)
+record main and side channels. Its
 [Overpass usage guidance](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html)
 supports caching bounded queries rather than using public servers as an
 application backend.
@@ -98,10 +137,10 @@ To rebuild from a locally prepared JSON list of gauge dictionaries
 (`id`, `country`, `river`, `name`, `lat`, `lon`):
 
 ```text
-python mountain_water/ui/map_component/build_gauge_courses.py --gauges tmp/gauges.json --cache-dir tmp/gauge-course-cache --fetch
+python mountain_water/ui/map_component/build_gauge_courses.py --gauges tmp/gauges.json --cache-dir tmp/gauge-course-cache --fetch --network-bbox 46.42 7.78 46.70 8.13
 ```
 
-Omit `--fetch` to rebuild entirely from the cached responses. The runtime
+Omit `--fetch` and `--network-bbox` to rebuild entirely from cached responses. The runtime
 reader also rechecks gauge identity, river name and coordinates before using
 a stored course. Every unavailable course has a reason in the returned
 GeoJSON collection's `missing` mapping.

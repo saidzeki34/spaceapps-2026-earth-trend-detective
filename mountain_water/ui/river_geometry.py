@@ -18,12 +18,16 @@ COURSES_FILE = Path(__file__).parent / "web" / "data" / "gauge_courses.geojson"
 ATTRIBUTION = "© OpenStreetMap contributors"
 LICENSE_URL = "https://opendatacommons.org/licenses/odbl/1-0/"
 MAX_MATCH_DISTANCE_M = 150.0
+MAX_POSITION_ONLY_DISTANCE_M = 25.0
 
 
 def name_keys(value: str) -> set[str]:
     """Normalize spelling only; parenthesized provider aliases remain usable."""
     value = str(value or "").replace("_", " ")
     parts = [value, re.sub(r"\([^)]*\)", "", value), *re.findall(r"\(([^)]*)\)", value)]
+    # OSM commonly records parallel language names as "Inn / En". These are
+    # explicit source aliases, not a fuzzy match to a neighbouring river.
+    parts.extend(re.split(r"\s+/\s+", value))
     keys = set()
     for part in parts:
         text = unicodedata.normalize("NFKD", part.casefold())
@@ -92,11 +96,12 @@ def geojson_for_gauges(gauges: list[dict]) -> dict:
             missing[gauge_id] = "The stored course does not match this station's river name."
             continue
         original = properties["gauge_position"]
-        if point_distance_m(lat, lon, original[1], original[0]) > MAX_MATCH_DISTANCE_M:
+        limit = MAX_POSITION_ONLY_DISTANCE_M if properties.get("match_method") == "station_position_only" else MAX_MATCH_DISTANCE_M
+        if point_distance_m(lat, lon, original[1], original[0]) > limit:
             missing[gauge_id] = "The station position differs from the verified course metadata."
             continue
         distance = min(line_distance_m(lat, lon, line) for line in feature["geometry"]["coordinates"])
-        if distance > MAX_MATCH_DISTANCE_M:
+        if distance > limit:
             missing[gauge_id] = "No verified river segment lies near this station position."
             continue
         features.append(feature)
@@ -104,5 +109,5 @@ def geojson_for_gauges(gauges: list[dict]) -> dict:
         "type": "FeatureCollection", "features": features, "missing": missing,
         "attribution": ATTRIBUTION, "license_url": LICENSE_URL,
         "source_url": "https://www.openstreetmap.org/copyright",
-        "note": "Mapped river segments near gauges; coverage may be partial. Not catchment boundaries.",
+        "note": "Mapped river channels and source-backed branches; coverage may be partial. No inferred lake connectors. Source and mouth are not verified. Not catchment boundaries.",
     }
