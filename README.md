@@ -30,6 +30,8 @@ git switch -c feature/your-task
 
 Preserve uncommitted work first. Use a separate worktree when another person or agent is working in your checkout. PRs target main.
 
+Use any editor. No repository-prescribed extensions, Dev Container, Supabase account or Vercel account is needed for this Git workflow; teammates need access to the GitHub repository.
+
 The agreed Python/Streamlit entry points and module files are intentionally zero bytes. Do not expect ExecuteProgram.py or streamlit_app.py to launch anything. The tests folder is empty apart from its tracking placeholder. See [SETUP.md](SETUP.md).
 
 Earlier generated implementation is preserved on [archive/generated-implementation](https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective/tree/archive/generated-implementation), commit 165e09b. It was never merged into main. It is an archive, not the accepted foundation; do not merge it wholesale.

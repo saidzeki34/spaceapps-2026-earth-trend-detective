@@ -1,8 +1,0 @@
-# Repository tooling only. No credentials or automatic actions.
-[mcp_servers.supabase-docs]
-url = "https://mcp.supabase.com/mcp?features=docs&read_only=true"
-
-# Enable only when competition work starts and the target project is confirmed.
-[mcp_servers.vercel]
-url = "https://mcp.vercel.com"
-enabled = false

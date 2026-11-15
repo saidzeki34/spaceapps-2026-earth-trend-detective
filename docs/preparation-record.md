@@ -2,6 +2,8 @@
 
 Historical record of the preparation update only. Preparation has since ended; see AGENTS.md and competition-compliance.md for the current skeleton-only delivery scope.
 
+The service-connection, extension-recommendation and Dev Container files described below were removed from main on 2026-11-15 at the user's request. The following account records the earlier preparation work, not current setup requirements.
+
 ## Inspected state
 Repository: saidzeki34/spaceapps-2026-earth-trend-detective (private).
 All eight branches pointed to 6e2d26fa0191b6f416c1f7f027ae27a89eae2d70 at inspection. Existing tracked contents were administrative documents/templates and ignore/editor rules. No application source or open PRs were present. Branches were reported as unprotected; this update does not change protection or collaborator access.
