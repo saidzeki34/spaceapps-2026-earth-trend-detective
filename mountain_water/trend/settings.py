@@ -18,6 +18,7 @@ class CatchmentFilter:
     max_area_km2: float | None = 500.0
     max_reservoirs: int | None = 0
     min_valid_years: int = 30
+    elevation_label: str = "mean elevation"  # how the elevation criterion is shown in the selection log
 
     elevation_columns: tuple[str, ...] = ("elev_mean", "mean_elev", "elevation_mean")
     area_columns: tuple[str, ...] = ("area", "area_km2", "catchment_area")
@@ -66,6 +67,7 @@ class TrendSettings:
                 filters=CatchmentFilter(
                     min_mean_elevation_m=800.0, max_area_km2=500.0, max_reservoirs=0, min_valid_years=30,
                     elevation_columns=("elevation",), area_columns=("area",), reservoir_columns=("regulated",),
+                    elevation_label="median elevation",
                 ))
         for key, value in overrides.items():
             setattr(s, key, value)

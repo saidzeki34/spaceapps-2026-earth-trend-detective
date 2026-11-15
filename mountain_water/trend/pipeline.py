@@ -122,6 +122,8 @@ def build_nve(settings: TrendSettings | None = None, save: bool = True) -> Trend
     completeness = preprocessing.year_completeness(obs, FLOW)
     gauges, selection_log = preprocessing.select_catchments(attrs, completeness, s.filters, s.min_year_completeness)
     selection_log.loc[0, "step"] = "NVE stations with daily discharge"
+    selection_log["step"] = selection_log["step"].str.replace("reservoirs <= 0 [regulated]", "unregulated [regulated]",
+                                                              regex=False)
     meta = dict(source="nve", flow_label="Discharge", dataset="NVE HydAPI daily discharge (1001) + seNorge via GTS",
                 downloaded_stations=sorted(obs["gauge_id"].unique()))
     return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)

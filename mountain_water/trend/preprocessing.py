@@ -93,7 +93,7 @@ def select_catchments(
         keep["keep"] &= op(values, limit).fillna(False).to_numpy()
         steps.append((f"{label} [{col}]", int(keep["keep"].sum())))
 
-    apply(f"mean elevation >= {flt.min_mean_elevation_m} m", flt.elevation_columns, flt.min_mean_elevation_m,
+    apply(f"{flt.elevation_label} >= {flt.min_mean_elevation_m} m", flt.elevation_columns, flt.min_mean_elevation_m,
           lambda v, x: v >= x)
     apply(f"area <= {flt.max_area_km2} km2", flt.area_columns, flt.max_area_km2, lambda v, x: v <= x)
     apply(f"reservoirs <= {flt.max_reservoirs}", flt.reservoir_columns, flt.max_reservoirs, lambda v, x: v <= x)

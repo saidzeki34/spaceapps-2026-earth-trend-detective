@@ -70,7 +70,13 @@ python -m mountain_water.trend report --source gldas --region no --gauge <id>
 - Outline layer: `stasjonnr` is written like `76.5.0`.
 - seNorge: `rr`, `tm` (°C) and `swe` (mm) are daily from 1957.
 
-**Live run on 2026-11-15:** 96 candidate stations; discharge for all 96 downloaded in under a minute, and all 96 outlines matched. seNorge point series checked for 2.32.0 (1960-10-01 to 2026-09-30). The full seNorge download is about 1,125 points × 3 themes. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
+**Live run on 2026-11-15:** the whole chain ran on real data.
+- Metadata pre-filter: 96 candidate stations; discharge for all 96 downloaded in under a minute; all 96 outlines matched.
+- seNorge: 1,125 points × 3 themes (3,375 requests).
+- `build --source nve`: 628 stations with daily discharge → 283 at median elevation ≥ 800 m → 167 at ≤ 500 km² → 118 unregulated → **84 catchments** with ≥ 30 valid years. Windows 1961–1970 … 2011–2020 and 2021–2026.
+- `build --source gldas --region no`: all 84 catchments, windows 2001–2010, 2011–2020, 2021–2025.
+
+Good gauges to start with: 2.13.0 (Sjoa at Nedre Sjodalsvatn, median 1542 m) and 88.4.0 (Lovatn, 33 % glacier). Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
 
 ## GLDAS-2.1 Noah (NASA)
 

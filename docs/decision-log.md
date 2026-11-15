@@ -22,3 +22,5 @@
 | 2026-11-15 | Norway backend on feature/backend-nve (from feature/backend-gldas): NVE HydAPI daily discharge, NVE catchment outlines, seNorge precipitation/temperature/SWE via NVE GridTimeSeries | User request; seNorge chosen as local drivers |
 | 2026-11-15 | Norway filter: median catchment elevation >= 800 m, area <= 500 km², unregulated (any regulation/reservoir metadata > 0 excludes), >= 30 valid years; period 1961–latest, 10-year windows (final >= 5 years kept) | User decision |
 | 2026-11-15 | GLDAS-2.1 comparison also for the Norwegian selection (`--region no`), same variables and method as Switzerland | User request |
+| 2026-11-15 | Norway regulation: NVE's catchmentRegTypeName decides (only categories starting "uregulert" kept); numeric reservoir fields only when no category | inspect showed regulated stations with all numeric regulation fields at 0 |
+| 2026-11-15 | seNorge drivers sampled on a regular grid of ~20 points per catchment and averaged, using GTS point series | GTS polygon endpoint returned HTTP 500 for every request, including NVE's documented example |
