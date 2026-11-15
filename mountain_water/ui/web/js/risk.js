@@ -1,107 +1,46 @@
-// Independent modal; does not change the map, saved selection or trend plots.
-const dialog = document.createElement('dialog');
-dialog.id = 'risk-dialog';
-dialog.setAttribute('aria-labelledby', 'risk-title');
-dialog.innerHTML = `<style>
-#risk-dialog{width:min(1120px,94vw);max-height:92vh;overflow:auto;border:1px solid #c9cec8;border-radius:8px;padding:24px;background:#fdfcfa;color:#39453e;font:14px system-ui}
-#risk-dialog::backdrop{background:#0008}#risk-dialog header{display:flex;justify-content:space-between;gap:20px}
-#risk-dialog form{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:20px 0}#risk-dialog label{display:grid;gap:5px}
-#risk-dialog input{width:110px}#risk-dialog input,#risk-dialog select,#risk-dialog button{padding:8px;border:1px solid #aaa;border-radius:4px;background:#fff;color:inherit}
-#risk-dialog .risk-cards{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0}#risk-dialog .risk-cards p{padding:12px;background:#edf2ef;margin:0;flex:1;min-width:160px}
-#risk-dialog .risk-plot{height:340px;min-width:0}#risk-space{height:450px!important}#risk-dialog details{margin:16px 0}#risk-dialog table{border-collapse:collapse;width:100%}#risk-dialog th,#risk-dialog td{padding:6px;text-align:left;border-bottom:1px solid #ddd}#risk-dialog .risk-table{max-height:280px;overflow:auto}
-</style><header><div><h2 id="risk-title">Water-flow risk assessment</h2><p id="risk-source"></p></div><button type="button" id="risk-close">Close</button></header>
-<p>Historical flow changes and optional threshold exposure. No forecast or operational risk score.</p>
-<form id="risk-form">
-<label>Season<select name="months"><option value="8,9">August–September</option><option value="1,2,3,4,5,6,7,8,9,10,11,12">Annual</option><option value="10,11,12,1,2,3">Winter (Oct–Mar)</option><option value="4,5,6,7,8,9">Summer (Apr–Sep)</option></select></label>
-<label>Analysis start<input name="first" type="number" min="1800" max="2200" value="1982" required></label><label>Analysis end<input name="last" type="number" min="1800" max="2200" value="2020" required></label>
-<label>Baseline start<input name="basefirst" type="number" min="1800" max="2200" value="1982" required></label><label>Baseline end<input name="baselast" type="number" min="1800" max="2200" value="2001" required></label>
-<label>Scenario threshold (m³/s)<input name="requirement" type="number" min="0" step="any" placeholder="Optional"></label>
-<button type="submit">Calculate</button></form>
-<p id="risk-status" role="status" aria-live="polite"></p><section id="risk-output" hidden>
-<div class="risk-cards" id="risk-cards"></div><label>Diagram<select id="risk-projection"><option value="3d">3D: quantity, timing, variability</option><option value="2d">2D: quantity vs timing; size = variability</option></select></label>
-<div id="risk-space" class="risk-plot"></div><div id="risk-volume" class="risk-plot"></div><div id="risk-timing" class="risk-plot"></div><div id="risk-flow" class="risk-plot"></div>
-<div id="risk-exposure"></div><div id="risk-exposure-plot" class="risk-plot" hidden></div>
-<details><summary>Evidence, coverage and limitations</summary><p id="risk-coverage"></p><ul id="risk-warnings"></ul></details>
-<details id="risk-events"><summary>Below-threshold episodes (censored = incomplete duration)</summary><div class="risk-table" id="risk-event-table"></div></details>
-<button type="button" id="risk-export">Export assessment JSON</button></section>`;
+import {RULES,ROLES,classify,surface,interpretation} from './risk-rules.js';
+const dialog=document.createElement('dialog');dialog.id='risk-dialog';dialog.setAttribute('aria-labelledby','risk-title');
+dialog.innerHTML=`<style>
+#risk-dialog{width:min(1150px,94vw);max-height:92vh;overflow:auto;padding:24px;border:1px solid #b8c7bf;background:#fdfcfa;color:#39453e;font:14px system-ui;border-radius:8px}#risk-dialog::backdrop{background:#0008}
+#risk-dialog header,#risk-dialog form,.risk-cards{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin-bottom:18px}#risk-dialog header{justify-content:space-between}#risk-dialog label{display:grid;gap:5px}#risk-dialog input{width:105px}#risk-dialog input,#risk-dialog select,#risk-dialog button{padding:8px;background:white;color:inherit;border:1px solid #aab8b0;border-radius:4px}
+.risk-cards article{flex:1;min-width:200px;background:#edf2ef;padding:16px}.risk-cards strong{display:block;font-size:25px;margin:8px 0}.risk-cards small{display:block;line-height:1.5}
+#risk-verdict{border:2px solid #718c7b;padding:20px;margin:18px 0;background:#eef4f0}#risk-verdict h3{font-size:26px;margin:4px 0 12px}#risk-verdict[data-level='1']{border-color:#ad7d22;background:#fff8e9}#risk-verdict[data-level='2']{border-color:#a55635;background:#fff1ea}
+#risk-dialog .risk-plot{height:360px}#risk-space,#risk-surface{height:470px!important}#risk-dialog details{margin:16px 0}#risk-dialog pre{white-space:pre-wrap}#risk-dialog table{border-collapse:collapse;width:100%}#risk-dialog td,#risk-dialog th{padding:7px;text-align:left;border-bottom:1px solid #ddd}.risk-table{max-height:260px;overflow:auto}
+</style><header><h2 id='risk-title'>River water: change and operational screening</h2><button id='risk-close'>Close</button></header><p id='risk-source'></p>
+<form id='risk-form'><label>Operation<select id='risk-role'></select></label><label>Season<select name='months'><option value='8,9'>August–September</option><option value='1,2,3,4,5,6,7,8,9,10,11,12'>Annual</option><option value='10,11,12,1,2,3'>Winter (Oct–Mar)</option><option value='4,5,6,7,8,9'>Summer (Apr–Sep)</option></select></label>
+<label>Analysis start<input name='first' type='number' min='1800' max='2200' value='1982' required></label><label>Analysis end<input name='last' type='number' min='1800' max='2200' value='2020' required></label><label>Baseline start<input name='basefirst' type='number' min='1800' max='2200' value='1982' required></label><label>Baseline end<input name='baselast' type='number' min='1800' max='2200' value='2001' required></label><label>Scenario flow threshold (m³/s)<input name='requirement' type='number' min='0' step='any' placeholder='Optional'></label><button>Calculate</button></form>
+<p id='risk-status' role='status'></p><section id='risk-output' hidden><div class='risk-cards' id='risk-cards'></div><section id='risk-verdict'></section>
+<details><summary>How the hardcoded screening works</summary><p>Prototype rules, not scientifically calibrated safety limits. Relatively stable: |volume change| &lt; 5%/decade, |timing change| &lt; 3 days/decade and variation &lt; 15%. Changing: any of these limits is reached. Strong change or high variability: |volume change| ≥ 10%, |timing change| ≥ 7 days or variation ≥ 30%; this overrides Changing. Increasing volume is change, not automatically a shortage. Missing indicators mean insufficient evidence. These rules do not measure acceleration or predict the future.</p><p>Operational screening is separate: a supplied threshold plus any observed shortfall flags a potential constraint. No observed shortfall with less than 90% daily coverage remains undetermined. Otherwise no historical shortfall is detected—not a safe-to-operate approval.</p></details>
+<h3>Historical variability surface</h3><p>Each cell is calculated from complete seasonal volumes: X = last year of the window; Y = window length (5–15 years); height/color = standard deviation as % of the fixed baseline. Overlapping windows are not independent. This is not a forecast, a risk probability, or a surface fitted through the three indicator values. Gaps stay blank.</p><label>Surface view<select id='risk-surface-mode'><option value='3d'>3D variability surface</option><option value='2d'>2D variability heatmap</option></select></label><div id='risk-surface' class='risk-plot'></div>
+<h3>Three-indicator position</h3><label>Indicator view<select id='risk-projection'><option value='3d'>3D: volume, timing, variation</option><option value='2d'>2D: volume and timing; color = variation</option></select></label><div id='risk-space' class='risk-plot'></div>
+<div id='risk-volume' class='risk-plot'></div><div id='risk-timing' class='risk-plot'></div><div id='risk-flow' class='risk-plot'></div><p id='risk-exposure'></p><div id='risk-exposure-plot' class='risk-plot' hidden></div>
+<details><summary>Coverage and limitations</summary><p id='risk-coverage'></p><ul id='risk-warnings'></ul></details><details id='risk-events'><summary>Below-threshold episodes</summary><div id='risk-event-table' class='risk-table'></div></details><button id='risk-export'>Export assessment JSON</button></section>`;
 document.body.append(dialog);
-const $ = s => dialog.querySelector(s);
-const num = x => x == null ? 'Unavailable' : Number(x).toLocaleString('en-GB', {maximumFractionDigits: 2});
-const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let selection, result, controller, ticket = 0;
-function clearPlots() { for (const node of dialog.querySelectorAll('.risk-plot')) if (node.data) Plotly.purge(node); }
-function selectionNow() { const p = new URLSearchParams(location.hash.slice(1)); return {dataset:p.get('dataset') || p.get('c')?.toLowerCase(), gauge:p.get('gauge') || p.get('r')}; }
-function installButton() {
-  const side = document.querySelector('#side');
-  for (const label of side?.querySelectorAll('label.check') || []) {
-    if (!label.querySelector('input[disabled]') || !label.textContent.includes('Risk assessment')) continue;
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'link'; button.textContent = 'Open water-flow risk assessment';
-    button.addEventListener('click', open); label.replaceWith(button);
-  }
-}
-new MutationObserver(installButton).observe(document.querySelector('#side'), {childList:true, subtree:true});
-installButton();
-function open() { selection = selectionNow(); $('#risk-source').textContent = `${selection.dataset || ''} / gauge ${selection.gauge || 'not selected'}`; dialog.showModal(); load(); }
-$('#risk-close').onclick = () => dialog.close();
-dialog.addEventListener('close', () => { ++ticket; controller?.abort(); clearPlots(); });
-$('#risk-form').onsubmit = e => { e.preventDefault(); load(); };
-$('#risk-projection').onchange = () => { if (result) drawSpace(); };
-async function load() {
-  const current = ++ticket; controller?.abort(); controller = new AbortController();
-  result = null; clearPlots(); $('#risk-output').hidden = true; $('#risk-status').textContent = 'Reading saved observed discharge…';
-  const form = new FormData($('#risk-form'));
-  const query = new URLSearchParams({...selection, months:form.get('months'), period:`${form.get('first')},${form.get('last')}`, baseline:`${form.get('basefirst')},${form.get('baselast')}`, requirement:form.get('requirement')});
-  try {
-    const response = await fetch(`/api/risk?${query}`, {signal:controller.signal}); const data = await response.json();
-    if (current !== ticket || !dialog.open) return;
-    if (!response.ok || data.status !== 'ready') throw new Error([data.error || data.message, data.build_command].filter(Boolean).join(' '));
-    result = data; $('#risk-output').hidden = false;
-    $('#risk-status').textContent = data.xyz_ready ? 'Historical assessment ready.' : 'Partial assessment: insufficient complete years or baseline for the full XYZ point.';
-    $('#risk-source').textContent = `${data.source} / gauge ${data.gauge}`;
-    draw();
-  } catch (e) { if (current === ticket && e.name !== 'AbortError') $('#risk-status').textContent = e.message; }
-}
-function plot(id, traces, title, ytitle, extra={}) {
-  return Plotly.react($(id), traces, {title:{text:title,font:{size:15}}, paper_bgcolor:'#fdfcfa',plot_bgcolor:'#fdfcfa', margin:{l:75,r:25,t:55,b:55}, yaxis:{title:{text:ytitle}}, ...extra}, {responsive:true,displaylogo:false});
-}
-function drawSpace() {
-  const a = result.xyz;
-  if (!result.xyz_ready) { $('#risk-space').textContent = 'XYZ unavailable. See coverage and limitations below.'; return; }
-  const text = [`Gauge ${result.gauge}<br>${result.common_years} common complete years`];
-  const x = [a.quantity_pct_decade], y = [a.timing_days_decade], z = [a.variability_pct_baseline];
-  if ($('#risk-projection').value === '2d') {
-    plot('#risk-space', [{type:'scatter',mode:'markers',x,y,text,marker:{size:[Math.max(10,Math.min(70,z[0]))],color:'#28715e'},hovertemplate:'%{text}<br>X=%{x:.2f}% / decade<br>Y=%{y:.2f} days / decade<extra></extra>'}], 'Flow-change diagram (marker diameter capped at 70 px)', 'Timing change (days / decade)', {xaxis:{title:{text:'Quantity change (% baseline / decade)'},zeroline:true},yaxis:{title:{text:'Timing change (days / decade)'},zeroline:true}});
-  } else plot('#risk-space', [{type:'scatter3d',mode:'markers',x,y,z,text,marker:{size:8,color:'#28715e'},hovertemplate:'%{text}<br>X=%{x:.2f}% / decade<br>Y=%{y:.2f} days / decade<br>Z=%{z:.2f}% baseline<extra></extra>'}], 'Historical flow-change diagram', '', {scene:{xaxis:{title:{text:'Quantity (% baseline / decade)'}},yaxis:{title:{text:'Timing (days / decade)'}},zaxis:{title:{text:'Variability (% baseline)'}}}});
-}
-function draw() {
-  const d = result, a = d.xyz;
-  $('#risk-cards').innerHTML = [['Quantity change',a.quantity_pct_decade,'% baseline / decade'],['Timing change',a.timing_days_decade,'days / decade'],['Interannual variability',a.variability_pct_baseline,'% of baseline']].map(([label,value,unit]) => `<p>${label}<br><strong>${num(value)}</strong><br>${unit}</p>`).join('');
-  drawSpace();
-  const years = d.annual.map(r=>r.year);
-  function annual(id, key, fitKey, title, unit, scale=1) {
-    const traces = [{type:'scatter',mode:'lines+markers',x:years,y:d.annual.map(r=>r[key]==null?null:r[key]/scale),connectgaps:false,name:'Complete records'}];
-    const fit = d.fits[fitKey];
-    if (fit) traces.push({type:'scatter',x:years,y:years.map(y=>(fit.slope*y+fit.intercept)/scale),name:'Sen trend (common complete years)',line:{dash:'dash'}});
-    if (key==='volume_m3' && d.baseline_volume_m3!=null) traces.push({type:'scatter',x:years,y:years.map(()=>d.baseline_volume_m3/scale),name:'Fixed baseline',line:{dash:'dot'}});
-    plot(id,traces,title,unit,{xaxis:{title:{text:'Hydrological year (labelled by end year)'}}});
-  }
-  annual('#risk-volume','volume_m3','volume','Seasonal volume','Volume (hm³)',1e6);
-  annual('#risk-timing','half_volume_day','timing','Half-volume delivery date','Day of hydrological year');
-  const h = d.hydrograph;
-  plot('#risk-flow', [{x:h.dates,y:h.low,name:'Baseline 10th percentile',line:{width:0},connectgaps:false},{x:h.dates,y:h.high,name:'Baseline 10–90% band',fill:'tonexty',line:{width:0},connectgaps:false},{x:h.dates,y:h.median,name:'Baseline median',line:{dash:'dot'},connectgaps:false},{x:h.dates,y:h.flow,name:'Observed flow',connectgaps:false},{x:h.dates,y:h.requirement,name:'Scenario threshold',line:{dash:'dash'},connectgaps:false}],`River flow: hydrological year ${d.display_year}`,'Discharge (m³/s)');
-  $('#risk-coverage').textContent = `Analysis ${d.settings.period.join('–')}; fixed baseline ${d.settings.baseline.join('–')}; ${d.baseline_years} complete baseline seasons; ${d.common_years} common complete years (${d.common_year_labels.join(', ')}). Hydrological year starts in month ${d.settings.hydro_year_start_month}. Raw interannual variability includes the trend. Baseline bands require 10 valid samples per calendar day. No small-baseline stability threshold is imposed; inspect absolute baseline volume (${num(d.baseline_volume_m3)} m³).`;
-  $('#risk-warnings').innerHTML = d.warnings.map(w=>`<li>${esc(w)}</li>`).join('');
-  $('#risk-events').hidden = !d.exposure; $('#risk-exposure-plot').hidden = !d.exposure;
-  $('#risk-exposure').textContent = '';
-  if (d.exposure) {
-    const e=d.exposure;
-    $('#risk-exposure').textContent = `Scenario exposure: ${num(e.below_percent)}% of ${e.valid_days} valid selected-season days below threshold; ${e.missing_days} missing selected-season days. ${e.observed_segments} observed episode segments; ${e.complete_events} complete episodes. Longest observed segment: ${e.longest_observed_segment_days} days; median complete duration: ${num(e.median_complete_duration_days)} days. Deficit: ${num(e.deficit_m3)} m³; above-requirement volume: ${num(e.above_requirement_m3)} m³.`;
-    plot('#risk-exposure-plot',[{type:'bar',x:d.annual_exposure.map(r=>r.year),y:d.annual_exposure.map(r=>r.below_percent),name:'Below-threshold days'}],'Annual scenario exposure (valid selected-season days)','Days below threshold (%)');
-    $('#risk-event-table').innerHTML = '<table><thead><tr><th>Start</th><th>End</th><th>Days</th><th>Deficit m³</th><th>Censored</th></tr></thead><tbody>'+e.events.map(r=>`<tr><td>${esc(r.start)}</td><td>${esc(r.end)}</td><td>${r.days}</td><td>${num(r.deficit_m3)}</td><td>${r.censored?'Yes':'No'}</td></tr>`).join('')+'</tbody></table>';
-  }
-}
-$('#risk-export').onclick = () => {
-  if (!result) return;
-  const url = URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));
-  const a=document.createElement('a');a.href=url;a.download='rivascope-risk-assessment.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-};
+const $=s=>dialog.querySelector(s), topRole=document.querySelector('#occupation-select');
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=x=>x==null?'Unavailable':Number(x).toLocaleString('en-GB',{maximumFractionDigits:2});
+$('#risk-role').innerHTML='<option value="">Select an operation</option>'+Object.entries(ROLES).map(([id,v])=>`<option value='${id}'>${v[0]}</option>`).join('');
+let selection,result,controller,ticket=0;
+function purge(){for(const n of dialog.querySelectorAll('.risk-plot')){if(n.data)Plotly.purge(n);n.textContent='';}}
+function install(){for(const label of document.querySelectorAll('#side label.check')){if(!label.querySelector('input[disabled]')||!label.textContent.includes('Risk assessment'))continue;const b=document.createElement('button');b.type='button';b.className='link';b.textContent='Open water-flow risk assessment';b.onclick=open;label.replaceWith(b);}}
+new MutationObserver(install).observe(document.querySelector('#side'),{childList:true,subtree:true});install();
+function open(){const p=new URLSearchParams(location.hash.slice(1));selection={dataset:p.get('dataset')||p.get('c')?.toLowerCase(),gauge:p.get('gauge')||p.get('r')};$('#risk-role').value=topRole?.value||p.get('o')||'';dialog.showModal();load();}
+function roleChanged(){ $('#risk-role').value=topRole?.value||'';$('#risk-form').elements.requirement.value='';result=null;if(dialog.open)load(); }
+topRole?.addEventListener('change',roleChanged);
+$('#risk-role').onchange=()=>{if(topRole){topRole.value=$('#risk-role').value;topRole.dispatchEvent(new Event('change',{bubbles:true}));}else{$('#risk-form').elements.requirement.value='';load();}};
+$('#risk-close').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{++ticket;controller?.abort();purge();});
+$('#risk-form').onsubmit=e=>{e.preventDefault();load();};
+$('#risk-projection').onchange=()=>{if(result)space();};$('#risk-surface-mode').onchange=()=>{if(result)drawSurface();};
+async function load(){const t=++ticket;controller?.abort();controller=new AbortController();result=null;purge();$('#risk-output').hidden=true;$('#risk-status').textContent='Reading saved observed river flow…';const f=new FormData($('#risk-form'));const q=new URLSearchParams({...selection,months:f.get('months'),period:`${f.get('first')},${f.get('last')}`,baseline:`${f.get('basefirst')},${f.get('baselast')}`,requirement:f.get('requirement')});try{const response=await fetch(`/api/risk?${q}`,{signal:controller.signal});const d=await response.json();if(t!==ticket||!dialog.open)return;if(!response.ok||d.status!=='ready')throw Error([d.error||d.message,d.build_command].filter(Boolean).join(' '));result=d;$('#risk-output').hidden=false;$('#risk-source').textContent=`${d.source} / gauge ${d.gauge}`;$('#risk-status').textContent=d.xyz_ready?'Historical assessment ready.':'Partial assessment: review coverage.';await draw();}catch(e){if(t===ticket&&e.name!=='AbortError')$('#risk-status').textContent=e.message;}}
+function plot(id,data,title,extra={}){return Plotly.react($(id),data,{title:{text:title,font:{size:15}},paper_bgcolor:'#fdfcfa',plot_bgcolor:'#fdfcfa',margin:{l:80,r:55,t:60,b:70},...extra},{responsive:true,displaylogo:false});}
+function drawSurface(){const s=surface(result);if(!s.z.flat().some(v=>v!==null)){$('#risk-surface').textContent='Not enough consecutive complete seasons and baseline coverage for a surface.';return;}const three=$('#risk-surface-mode').value==='3d';const titles={xaxis:{title:{text:'Window ending year'}},yaxis:{title:{text:'Window length (years)'}},zaxis:{title:{text:'Variation (% baseline)'}}};return plot('#risk-surface',[{type:three?'surface':'heatmap',x:s.years,y:s.windows,z:s.z,connectgaps:false,colorscale:'Viridis',colorbar:{title:{text:'Variation %'}},hovertemplate:'Ending year %{x}<br>Window %{y} years<br>Variation %{z:.2f}%<extra></extra>'}],'Historical seasonal-flow variability',three?{scene:titles}:{xaxis:titles.xaxis,yaxis:titles.yaxis});}
+function space(){const a=result.xyz;if(!result.xyz_ready){$('#risk-space').textContent='Three-indicator position unavailable; see coverage.';return;}const three=$('#risk-projection').value==='3d';const trace={type:three?'scatter3d':'scatter',mode:'markers',x:[a.quantity_pct_decade],y:[a.timing_days_decade],marker:{size:three?8:18,color:[a.variability_pct_baseline],colorscale:'Viridis',showscale:!three,colorbar:{title:{text:'Variation %'}}},text:[`Gauge ${esc(result.gauge)}; variation ${num(a.variability_pct_baseline)}%`],hovertemplate:'%{text}<br>Volume %{x:.2f}% / decade<br>Timing %{y:.2f} days / decade<extra></extra>'};if(three)trace.z=[a.variability_pct_baseline];const axes={xaxis:{title:{text:'Volume change (% baseline / decade)'},zeroline:true},yaxis:{title:{text:'Timing change (days / decade)'},zeroline:true},zaxis:{title:{text:'Year-to-year variation (% baseline)'}}};return plot('#risk-space',[trace],'Selected gauge: three independent indicators',three?{scene:axes}:{xaxis:axes.xaxis,yaxis:axes.yaxis});}
+async function draw(){const d=result,a=d.xyz;const cards=[['Water volume',a.quantity_pct_decade,'% of baseline per decade','Positive means more water in the selected season over time; negative means less.'],['Arrival timing',a.timing_days_decade,'days per decade','Negative means the annual halfway-volume date is moving earlier; positive means later. This is not seasonal onset.'],['Year-to-year variation',a.variability_pct_baseline,'% of baseline','How much seasonal volume differs between years (standard deviation). Higher means less consistent; this is not a percentage loss.']];$('#risk-cards').innerHTML=cards.map(([name,v,unit,text])=>`<article>${name}<strong>${num(v)}</strong>${unit}<small>${text}</small></article>`).join('');
+const info=interpretation(d,$('#risk-role').value);$('#risk-verdict').dataset.level=String(info.trend.level);$('#risk-verdict').innerHTML=`<div>Historical flow pattern · prototype rules</div><h3>${info.trend.label}</h3><p>${esc(info.trend.reason)}</p><h3>${info.operation.label}</h3><p>${esc(info.operation.text)}</p><h4>${esc(ROLES[info.role]?.[0]||'Operation not selected')}</h4><p>${esc(info.context)}</p><p>${esc(info.action)}</p><p>Possible implications at this gauge, not a regional prediction. Site-specific water rights, usable supply, demand, storage and alternatives still require assessment. Changing occupation clears the previous threshold.</p>`;
+const jobs=[drawSurface(),space()];const years=d.annual.map(r=>r.year);
+for(const [id,key,fitKey,title,unit,scale] of [['#risk-volume','volume_m3','volume','Water volume each season','Volume (hm³)',1e6],['#risk-timing','half_volume_day','timing','When half the annual water has passed','Day of hydrological year',1]]){const traces=[{x:years,y:d.annual.map(r=>r[key]==null?null:r[key]/scale),mode:'lines+markers',connectgaps:false,name:'Complete records'}];const f=d.fits[fitKey];if(f)traces.push({x:years,y:years.map(y=>(f.slope*y+f.intercept)/scale),name:'Sen trend',line:{dash:'dash'}});if(key==='volume_m3'&&d.baseline_volume_m3!=null)traces.push({x:years,y:years.map(()=>d.baseline_volume_m3/scale),name:'Fixed baseline'});jobs.push(plot(id,traces,title,{yaxis:{title:{text:unit}},xaxis:{title:{text:'Hydrological year'}}}));}
+const h=d.hydrograph;jobs.push(plot('#risk-flow',[{x:h.dates,y:h.low,name:'10th percentile',line:{width:0}},{x:h.dates,y:h.high,name:'Baseline 10–90%',fill:'tonexty',line:{width:0}},{x:h.dates,y:h.median,name:'Baseline median'},{x:h.dates,y:h.flow,name:'Observed flow'},{x:h.dates,y:h.requirement,name:'Scenario threshold',line:{dash:'dash'}}].map(t=>({...t,connectgaps:false})),`River flow: hydrological year ${d.display_year}`,{yaxis:{title:{text:'Discharge (m³/s)'}}}));
+$('#risk-coverage').textContent=`Analysis ${d.settings.period.join('–')}; baseline ${d.settings.baseline.join('–')}; ${d.common_years} common complete indicator years; ${d.baseline_years} complete baseline seasons. Baseline volume ${num(d.baseline_volume_m3)} m³. Hydrological year starts in month ${d.settings.hydro_year_start_month}. Surface uses all complete seasonal volumes, whereas XYZ uses complete full years. Raw variability includes long-term change. Small baselines can inflate relative values.`;$('#risk-warnings').innerHTML=d.warnings.map(w=>`<li>${esc(w)}</li>`).join('');$('#risk-events').hidden=!d.exposure;$('#risk-exposure-plot').hidden=!d.exposure;$('#risk-exposure').textContent='';
+if(d.exposure){const e=d.exposure;$('#risk-exposure').textContent=`Below threshold: ${num(e.below_percent)}% of ${e.valid_days} valid days; ${e.missing_days} missing days. ${e.observed_segments} observed episode segments, ${e.complete_events} complete episodes. Longest observed segment ${e.longest_observed_segment_days} days; median complete duration ${num(e.median_complete_duration_days)} days. Deficit ${num(e.deficit_m3)} m³; above-threshold volume ${num(e.above_requirement_m3)} m³ (not flood risk).`;jobs.push(plot('#risk-exposure-plot',[{type:'bar',x:d.annual_exposure.map(r=>r.year),y:d.annual_exposure.map(r=>r.below_percent)}],'Days below threshold by year',{yaxis:{title:{text:'% of valid selected-season days'}}}));$('#risk-event-table').innerHTML='<table><tr><th>Start</th><th>End</th><th>Days</th><th>Deficit m³</th><th>Censored</th></tr>'+e.events.map(r=>`<tr><td>${esc(r.start)}</td><td>${esc(r.end)}</td><td>${r.days}</td><td>${num(r.deficit_m3)}</td><td>${r.censored?'Yes':'No'}</td></tr>`).join('')+'</table>';}
+await Promise.all(jobs);}
+$('#risk-export').onclick=()=>{if(!result)return;const body={...result,screening:interpretation(result,$('#risk-role').value),variability_surface:surface(result)};const u=URL.createObjectURL(new Blob([JSON.stringify(body,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='rivascope-risk-assessment.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
