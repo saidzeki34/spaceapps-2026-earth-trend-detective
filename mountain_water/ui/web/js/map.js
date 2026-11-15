@@ -30,7 +30,8 @@ export function createMap(element, geodata, handlers) {
   map.getPane("labels").style.pointerEvents = "none";
   map.getPane("shade").style.pointerEvents = "none";
   L.tileLayer(IMAGERY, { maxZoom: 13, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }).addTo(map);
-  L.tileLayer(LABELS, { maxZoom: 13, pane: "labels", attribution: "borders and names © Esri" }).addTo(map);
+  // The reference tiles carry canton and municipality borders; they stay faint context.
+  L.tileLayer(LABELS, { maxZoom: 13, pane: "labels", opacity: 0.55, attribution: "borders and names © Esri" }).addTo(map);
 
   // Everything outside the countries that can be explored is shaded.
   const holes = [];

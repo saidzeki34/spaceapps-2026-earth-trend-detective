@@ -1,0 +1,39 @@
+name: UI chunks
+on:
+  push:
+    branches: [ui-fixes-continuation]
+permissions:
+  contents: write
+jobs:
+  chunk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split large UI files and run syntax checks
+        run: |
+          set +e
+          rm -rf .chunks
+          mkdir -p .chunks
+          for f in mountain_water/ui/web/js/main.js mountain_water/ui/backend.py mountain_water/ui/web/styles.css; do
+            split -C 18000 -d -a 2 "$f" ".chunks/$(basename "$f").part"
+          done
+          {
+            echo "commit: $GITHUB_SHA"
+            for f in main map; do
+              cp "mountain_water/ui/web/js/$f.js" "/tmp/$f.mjs"
+              node --check "/tmp/$f.mjs" && echo "node --check $f.js: ok" || echo "node --check $f.js: FAILED"
+            done
+            python3 -m py_compile mountain_water/ui/*.py && echo "py_compile ui: ok" || echo "py_compile ui: FAILED"
+            echo "--- vendor"
+            ls -la mountain_water/ui/web/vendor
+            grep -rhoE "plotly.js v[0-9.]+" mountain_water/ui/web/vendor | sort -u | head -3
+            echo "--- files mentioning physic"
+            grep -rnil "physic" mountain_water/ui --include="*.js" --include="*.py" --include="*.html" --include="*.css" --include="*.md" --exclude-dir=vendor
+            echo "--- web/data"
+            ls -la mountain_water/ui/web/data
+          } > .chunks/info.txt 2>&1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f .chunks
+          git diff --cached --quiet || git commit -m "chore: refresh readable UI chunks"
+          git push
