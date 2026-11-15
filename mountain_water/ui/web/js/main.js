@@ -390,7 +390,10 @@ function renderResults() {
   } else if (state.country && regionTabs().length) {
     const tabs = regionTabs(), current = tabs.find(t => t.view === state.region) || tabs[0];
     blocks = [{ id: current.view, view: current.view, dataset: current.dataset, title: TITLES[current.view] }];
-    head = `<header class="res-head"><div><h2>${esc(countryName(state.country))}</h2><p>${data.count} rivers compared</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><span class="res-actions"><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button><button data-action="close-results" aria-label="Close results panel">Close</button></span></div></header>
+    const displayed = ds(current.dataset), network = current.dataset === 'stations';
+    const heading = network ? displayed.label : countryName(state.country);
+    const scope = network ? `${displayed.count} stations across ${displayed.countries.join(' + ')}` : `${displayed.count} rivers compared`;
+    head = `<header class="res-head"><div><h2>${esc(heading)}</h2><p>${esc(scope)}</p></div><div class="res-side"><p>${esc(displayed.label)}<br>${period(displayed)}</p><span class="res-actions"><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button><button data-action="close-results" aria-label="Close results panel">Close</button></span></div></header>
       <nav class="tabs">${tabs.map(t => `<button data-region="${t.view}" class="${t.view === current.view ? 'on' : ''}">${esc(TITLES[t.view])}</button>`).join('')}</nav>`;
   } else { element.innerHTML = ''; return; }
   element.innerHTML = `${head}${blocks.map((b, i) => blockHTML(b, i + 1)).join('')}<p class="foot">Sen's slope per decade · Mann-Kendall test · FDR per metric. Statistical association, not cause.</p>`;
@@ -611,7 +614,7 @@ function drawHeadline(element, rows) {
   const body = $('.tbl', element);
   body.hidden = false;
   body.className = 'tbl headline';
-  body.innerHTML = `<p class="key">Saved trend indicators. The experimental assessment reports historical threshold exposure; operational risk remains unvalidated. Indicator selections by occupation await team review. <button type="button" data-risk-open>Open water-flow assessment</button></p><div class="readout">${cells}</div>${table}`;
+  body.innerHTML = `<p class="key">Historical trends · experimental assessment. <button type="button" data-risk-open>Water availability assessment</button></p><div class="readout">${cells}</div>${table}`;
 }
 
 async function tableFor(block) {
@@ -774,5 +777,14 @@ new ResizeObserver(() => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { for (const block of live.values()) if (block.payload) draw(block); }, 120);
 }).observe($('#results'));
+window.addEventListener('hashchange', () => {
+  if (!catalog || !geodata) return;
+  clearTimeout(yearTimer);
+  for (const dialog of $$('dialog[open]')) dialog.close();
+  recall();
+  state.resultsClosed = false;
+  if (!state.occupation) state.occupation = OCCUPATIONS[0].id;
+  openApp();
+});
 window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye'));
 start();
