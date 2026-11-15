@@ -15,3 +15,7 @@
 | 2026-11-15 | Data: CAMELS-CH (Zenodo), observed daily series only; static attributes for filtering, labels and maps. Switzerland only; Norway, NASA data and forecasting deferred | User decision |
 | 2026-11-15 | Mountain filter defaults: mean elevation >= 1500 m, area <= 500 km², no reservoirs, >= 30 valid years; no glacier/non-glacier separation | User decision; thresholds remain tunable |
 | 2026-11-15 | Hydrological year Oct–Sep; 10-year comparison windows; Sen's slope + Mann-Kendall (trend-free pre-whitening) with Benjamini-Hochberg FDR | Plan approved by user; Hamed-Rao variance correction rejected because it returned undefined p-values for strong trends |
+| 2026-11-15 | GLDAS backend on feature/backend-gldas (from work/backend at 4324808): GLDAS-2.1 Noah 0.25° 3-hourly, aggregated to daily | User choice among GLDAS-2.0/2.1/2.2 options |
+| 2026-11-15 | GLDAS locations: the CAMELS-CH mountain selection, area-weighted over catchment outlines; variables: runoff (surface + baseflow), snowmelt, precipitation, snowfall, temperature, evapotranspiration, SWE (no soil moisture) | User decision |
+| 2026-11-15 | GLDAS windows: 10-year steps, final window kept if >= 5 years; >= 20 valid years required | User decision; record starts 2000 |
+| 2026-11-15 | Access via Giovanni Time Series API, not Hydrology Data Rods | GES DISC announced Data Rods discontinuation (no earlier than 2025-10-31) |
