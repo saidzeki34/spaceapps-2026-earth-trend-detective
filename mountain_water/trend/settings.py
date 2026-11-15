@@ -28,6 +28,7 @@ class CatchmentFilter:
 class TrendSettings:
     raw_dir: Path = Path("data/raw/camels_ch")
     processed_dir: Path = Path("data/processed/trend")
+    gldas_raw_dir: Path = Path("data/raw/gldas")
 
     # Hydrological year starts in October (snow accumulation -> melt in one year).
     # Years are labelled by the calendar year in which they end (Oct 2019-Sep 2020 = 2020).
@@ -41,3 +42,12 @@ class TrendSettings:
 
     alpha: float = 0.05
     filters: CatchmentFilter = field(default_factory=CatchmentFilter)
+
+    @classmethod
+    def gldas(cls, **overrides) -> "TrendSettings":
+        """Defaults for GLDAS-2.1 (record starts 2000): >= 20 valid years, keep a final window of >= 5 years."""
+        s = cls(processed_dir=Path("data/processed/trend_gldas"), min_window_years=5,
+                filters=CatchmentFilter(min_valid_years=20))
+        for key, value in overrides.items():
+            setattr(s, key, value)
+        return s

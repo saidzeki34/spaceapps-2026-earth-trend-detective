@@ -1,6 +1,6 @@
 # trend: CAMELS-CH water availability trends
 
-This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. Switzerland only for now. No NASA data and no forecasts yet.
+This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. The same analysis runs on **NASA GLDAS-2.1** model output for the same catchments (see [GLDAS](#gldas-21-noah-nasa) below), and the two sources can be compared. Switzerland only for now. No forecasts yet.
 
 ## Run
 
@@ -38,6 +38,40 @@ plots.regime_by_window(r, r.gauges[0])     # plotly Figure
 | Figures | `plots.py`, `registry.py` | 13 Plotly figure functions (light/dark) plus a monthly-regime table, built from the tables in `TrendResults` |
 
 The 10-year windows start at the first valid hydrological year, 1982 (Oct 1981–Sep 1982), because the record starts in January 1981. That gives 1982–1991, 1992–2001, 2002–2011 and 2012–2020. A final window shorter than 8 years is dropped. Use `--hydro-year-start 1` to get calendar-year decades (1981–1990, ...).
+
+## GLDAS-2.1 Noah (NASA)
+
+GLDAS is NASA's Global Land Data Assimilation System. This pipeline uses **GLDAS_NOAH025_3H 2.1**: the Noah land-surface model on a 0.25° grid, 3-hourly, from 2000 to about 3 months ago. GLDAS is a model, not a measurement. It has no gauges, and its runoff isn't routed down rivers.
+
+```text
+export EARTHDATA_TOKEN=<token>     # free Earthdata account: urs.earthdata.nasa.gov -> Generate Token (valid 60 days)
+python -m mountain_water.trend build                             # CAMELS-CH first: provides the catchment selection
+python -m mountain_water.trend download --source gldas --probe   # one tiny request: checks the token and response format
+python -m mountain_water.trend download --source gldas           # ~2,200 cached requests into data/raw/gldas; rerun to resume
+python -m mountain_water.trend build --source gldas              # -> data/processed/trend_gldas
+python -m mountain_water.trend report --source gldas --gauge 2268   # -> data/exports/trend_gldas, incl. observed vs GLDAS
+```
+
+| Step | Module | What it does |
+| --- | --- | --- |
+| Catchments to grid | `catchment_grid.py` | Overlaps each selected CAMELS-CH catchment outline (`catchment_delineations/CAMELS_CH_catchments.shp`, LV95) with the 0.25° cells. Weight per cell = share of the catchment area. The 33 default catchments touch 45 cells (1–5 each). |
+| Download | `gldas.py` | Giovanni Time Series API (`api.giovanni.earthdata.nasa.gov/timeseries`; it replaced Hydrology Data Rods) at each cell centre. 8 variables per cell in 5-year requests, with retries. Raw CSVs are cached so reruns skip finished requests. |
+| Daily series | `gldas.py` | Converts 3-hourly values to daily ones (see table). Days with fewer than 8 values become NaN, and the fill value −9999 becomes NaN. Catchment means are area-weighted, renormalised when a cell has no data. |
+| Analysis | `pipeline.build_gldas` | Uses the same `analyze()` as CAMELS-CH. Requires ≥ 20 valid years. Windows are 2001–2010, 2011–2020 and 2021–latest; a final window of 5 or more years is kept. |
+| Observed vs GLDAS | `sources.py`, `plots.source_*` | Over the common hydrological years (2001–2020): catchment means, bias, year-to-year correlation, trends from both sources and the seasonal hydrograph. |
+
+| GLDAS variable | Column | Daily value |
+| --- | --- | --- |
+| `Qs_acc` + `Qsb_acc` | `discharge_spec` (plus `runoff_surface`, `runoff_base`) | Total runoff, mm/d. `discharge_vol` = the same converted to m³/s with the catchment area |
+| `Qsm_acc` | `snowmelt` | mm/d |
+| `Rainf_f_tavg`, `Snowf_tavg` | `precipitation`, `snowfall` | rate × 86400, mm/d |
+| `Evap_tavg` | `evap` | rate × 86400, mm/d |
+| `Tair_f_inst` | `temperature_mean` | K − 273.15, °C |
+| `SWE_inst` | `swe` | mm |
+
+Checked against the live API on 2026-11-15 with `--probe`: the token is accepted and the response parses. It has `key,value` metadata lines including `unit` and `undef`, then `Timestamp (UTC),Data` rows such as `2010-01-01 03:00,259.673`. When the cached data is loaded, each variable's reported `unit` is checked against the unit the conversion assumes (`kg m-2` for `_acc`, `kg m-2 s-1` for `_tavg` rates, `K`, `kg m-2` for SWE). A mismatch stops the build instead of silently producing wrong numbers. The full download hasn't been run yet. Any variable the API refuses is listed in `data/raw/gldas/failed_requests.csv`.
+
+Interpretation: GLDAS runoff isn't routed through river channels, so its timing leads observed discharge. A 0.25° cell is larger than many of these catchments, and glaciers and hydropower aren't represented. Treat GLDAS as consistent model context, and use the comparison with CAMELS-CH to see where it can stand in for observations.
 
 ## Verified on the real data
 

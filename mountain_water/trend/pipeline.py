@@ -5,6 +5,8 @@ Usage from Python (e.g. Streamlit)::
     from mountain_water.trend import pipeline
     results = pipeline.load()          # cached tables from data/processed/trend
     results = pipeline.build()         # recompute from data/raw/camels_ch
+    gldas = pipeline.build_gldas()     # same catchments from GLDAS-2.1 (data/raw/gldas)
+    gldas = pipeline.load(TrendSettings.gldas().processed_dir)
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import camels_ch, comparison, drivers, preprocessing, seasonal, trends
+from . import camels_ch, comparison, drivers, gldas, preprocessing, seasonal, trends
 from .flow_metrics import annual_volume_metrics
 from .registry import DRIVER_METRICS, FLOW_METRICS
 from .settings import TrendSettings
@@ -93,17 +95,65 @@ def _standard_columns(attrs: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(settings: TrendSettings | None = None, save: bool = True) -> TrendResults:
+    """CAMELS-CH: observed daily series, mountain catchment filter, full analysis."""
     s = settings or TrendSettings()
     root = camels_ch.find_dataset_root(s.raw_dir)
     log.info("Reading CAMELS-CH from %s", root)
 
     attrs = _standard_columns(camels_ch.load_attributes(root))
     obs, units = camels_ch.load_observed(root)
-    obs = preprocessing.add_hydro_year(obs, s.hydro_year_start_month)
-    obs = preprocessing.fill_short_gaps(obs, GAP_FILL_COLUMNS, s.max_gap_fill_days)
+    obs = _prepare(obs, s)
+    completeness = preprocessing.year_completeness(obs, FLOW)
+    gauges, selection_log = preprocessing.select_catchments(attrs, completeness, s.filters, s.min_year_completeness)
+    meta = dict(source="camels_ch", flow_label="Discharge", dataset_root=str(root), provenance=_read_provenance(root))
+    return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)
+
+
+def build_gldas(settings: TrendSettings | None = None, gauge_ids: list[str] | None = None,
+                save: bool = True) -> TrendResults:
+    """GLDAS-2.1 Noah runoff and drivers, area-weighted over the selected CAMELS-CH catchment outlines.
+
+    By default the catchments are the CAMELS-CH selection from the last ``build`` (same 33 sites).
+    """
+    s = settings or TrendSettings.gldas()
+    root = camels_ch.find_dataset_root(s.raw_dir)
+    attrs = _standard_columns(camels_ch.load_attributes(root))
+    gauge_ids = gauge_ids or camels_selection()
+    weights = gldas.catchment_weights(root, gauge_ids)
+    obs, units = gldas.load_daily(weights, s.gldas_raw_dir)
+    obs = _prepare(obs, s)
     completeness = preprocessing.year_completeness(obs, FLOW)
 
-    gauges, selection_log = preprocessing.select_catchments(attrs, completeness, s.filters, s.min_year_completeness)
+    n_valid = preprocessing.valid_years(completeness, s.min_year_completeness).groupby("gauge_id").size()
+    with_data = sorted(obs.loc[obs[FLOW].notna(), "gauge_id"].unique())
+    gauges = [g for g in with_data if n_valid.get(g, 0) >= s.filters.min_valid_years]
+    selection_log = pd.DataFrame([
+        ("CAMELS-CH mountain selection", len(gauge_ids)),
+        ("GLDAS runoff available", len(with_data)),
+        (f">= {s.filters.min_valid_years} years with >= {s.min_year_completeness:.0%} valid days", len(gauges)),
+    ], columns=["step", "remaining"])
+    meta = dict(
+        source="gldas", flow_label="GLDAS runoff", product=f"{gldas.COLLECTION} (GLDAS-2.1 Noah 0.25° 3-hourly)",
+        cells=weights.to_dict(orient="records"),
+    )
+    return analyze(obs, attrs, units, completeness, gauges, selection_log, s, meta, save)
+
+
+def camels_selection(processed_dir: Path | None = None) -> list[str]:
+    meta_path = (processed_dir or TrendSettings().processed_dir) / "meta.json"
+    if not meta_path.exists():
+        raise FileNotFoundError("No CAMELS-CH selection yet. Run `python -m mountain_water.trend build` first.")
+    return list(json.loads(meta_path.read_text())["selected_gauges"])
+
+
+def _prepare(obs: pd.DataFrame, s: TrendSettings) -> pd.DataFrame:
+    obs = preprocessing.add_hydro_year(obs, s.hydro_year_start_month)
+    return preprocessing.fill_short_gaps(obs, GAP_FILL_COLUMNS, s.max_gap_fill_days)
+
+
+def analyze(obs: pd.DataFrame, attrs: pd.DataFrame, units: dict, completeness: pd.DataFrame, gauges: list[str],
+            selection_log: pd.DataFrame, s: TrendSettings, meta: dict, save: bool = True) -> TrendResults:
+    """Source-independent analysis of a prepared daily table (gauge_id, date, hydro_year, discharge_vol, ...)."""
     log.info("Selected %d catchments", len(gauges))
     if not gauges:
         raise ValueError(f"No catchments left after filtering:\n{selection_log.to_string(index=False)}")
@@ -130,9 +180,10 @@ def build(settings: TrendSettings | None = None, save: bool = True) -> TrendResu
     driver_metrics = [m for m in DRIVER_METRICS if m in annual]
     all_metrics = flow_metrics + driver_metrics
 
-    trend_tbl = trends.trend_table(annual, all_metrics, s.alpha)
+    min_years = min(15, s.filters.min_valid_years)  # fewer only for short records (e.g. tests)
+    trend_tbl = trends.trend_table(annual, all_metrics, s.alpha, min_years=min_years)
     win_cmp = comparison.window_comparison(annual, all_metrics)
-    corr = drivers.correlations(annual, flow_metrics, driver_metrics)
+    corr = drivers.correlations(annual, flow_metrics, driver_metrics, min_years=min_years)
     attr_cols = [a for a in ATTRIBUTE_CANDIDATES if a in attrs]
 
     results = TrendResults(
@@ -147,15 +198,14 @@ def build(settings: TrendSettings | None = None, save: bool = True) -> TrendResu
         regime_daily=seasonal.daily_regime(daily),
         correlations=corr,
         correlation_summary=drivers.correlation_summary(corr, s.alpha),
-        attribution=drivers.attribute_change(annual),
+        attribution=drivers.attribute_change(annual, min_years=min_years),
         trend_vs_attributes=comparison.trend_attribute_matrix(trend_tbl, attrs, all_metrics, attr_cols),
         meta=dict(
-            dataset_root=str(root),
             units=units,
             selected_gauges=gauges,
             windows=[preprocessing.window_label(w) for w in wins],
             settings=asdict(s),
-            provenance=_read_provenance(root),
+            **meta,
         ),
     )
     if save:

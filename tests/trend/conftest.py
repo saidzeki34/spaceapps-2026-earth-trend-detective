@@ -105,3 +105,96 @@ def results(settings):
     from mountain_water.trend import pipeline
 
     return pipeline.build(settings)
+
+
+# --------------------------------------------------------------------------- GLDAS fixtures
+
+LV95_WKT = (
+    'PROJCS["CH1903+_LV95",GEOGCS["GCS_CH1903+",DATUM["D_CH1903+",SPHEROID["Bessel_1841",6377397.155,299.1528128]],'
+    'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Hotine_Oblique_Mercator_Azimuth_Center"],'
+    'PARAMETER["False_Easting",2600000.0],PARAMETER["False_Northing",1200000.0],PARAMETER["Scale_Factor",1.0],'
+    'PARAMETER["Azimuth",90.0],PARAMETER["Longitude_Of_Center",7.439583333333333],'
+    'PARAMETER["Latitude_Of_Center",46.95240555555556],UNIT["Meter",1.0]]'
+)
+
+
+def write_fake_catchments(base: Path) -> None:
+    """Square catchments (in LV95) of the documented area around each synthetic gauge."""
+    import shapefile
+    from pyproj import Transformer
+
+    topo = pd.read_csv(base / "static_attributes" / "CAMELS_CH_topographic_attributes.csv", sep=";", skiprows=1)
+    to_lv95 = Transformer.from_crs("EPSG:4326", "EPSG:2056", always_xy=True)
+    folder = base / "catchment_delineations"
+    folder.mkdir()
+    w = shapefile.Writer(str(folder / "CAMELS_CH_catchments"), shapeType=shapefile.POLYGON)
+    w.field("gauge_id", "F", 19, 11)
+    for row in topo.itertuples():
+        x, y = to_lv95.transform(row.gauge_lon, row.gauge_lat)
+        h = (row.area * 1e6) ** 0.5 / 2
+        w.poly([[(x - h, y - h), (x - h, y + h), (x + h, y + h), (x + h, y - h), (x - h, y - h)]])
+        w.record(float(row.gauge_id))
+    w.close()
+    (folder / "CAMELS_CH_catchments.prj").write_text(LV95_WKT)
+
+
+class FakeGiovanni:
+    """Returns Giovanni-style CSV text with synthetic 3-hourly values (earlier melt over time)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def fetch(self, variable, lat, lon, start, end):
+        self.calls += 1
+        t = pd.date_range(f"{start} 00:00", f"{end} 21:00", freq="3h")
+        doy = t.day_of_year.to_numpy()
+        years = (t.year.to_numpy() - 2000) + doy / 366
+        rng = np.random.default_rng(int(abs(lat * 1000 + lon * 10)) + len(variable))
+        melt_peak = 170 - 0.6 * years  # ~6 days earlier per decade
+        melt = np.exp(-0.5 * ((doy - melt_peak) / 30) ** 2)
+        temp = 273.15 + 2 + 8 * np.sin(2 * np.pi * (doy - 110) / 365) + 0.04 * years + rng.normal(0, 1.5, len(t))
+        values = {
+            "Qs_acc": 0.05 + 0.6 * melt,                     # kg m-2 per 3 h
+            "Qsb_acc": 0.10 + 0.3 * melt,
+            "Qsm_acc": 0.8 * melt,
+            "Rainf_f_tavg": np.full(len(t), 3.5e-5) * rng.uniform(0, 2, len(t)),  # kg m-2 s-1
+            "Snowf_tavg": np.where(temp < 273.15, 2.0e-5, 0.0),
+            "Evap_tavg": 1.0e-5 * (1 + np.sin(2 * np.pi * (doy - 100) / 365)),
+            "Tair_f_inst": temp,
+            "SWE_inst": np.clip(250 * np.cos(2 * np.pi * (doy - 60) / 365), 0, None),
+        }[variable]
+        values = np.asarray(values, dtype=float)
+        values[5] = -9999.0  # one fill value per request
+        unit = {"Tair_f_inst": "K", "Rainf_f_tavg": "kg m-2 s-1", "Snowf_tavg": "kg m-2 s-1",
+                "Evap_tavg": "kg m-2 s-1"}.get(variable, "kg m-2")
+        lines = [  # same layout as the real Giovanni response
+            "prod_name,GLDAS_NOAH025_3H.2.1",
+            f"param_short_name,{variable}",
+            f"unit,{unit}",
+            "undef,-9999",
+            f"lat,{lat}",
+            f"lon,{lon}",
+            "",
+            "Timestamp (UTC),Data",
+        ] + [f"{ts:%Y-%m-%d %H:%M},{v:.6g}" for ts, v in zip(t, values)]
+        return "\n".join(lines) + "\n"
+
+
+@pytest.fixture(scope="session")
+def gldas_results(fake_raw_dir, tmp_path_factory):
+    from mountain_water.trend import gldas, pipeline
+    from mountain_water.trend.settings import CatchmentFilter, TrendSettings
+
+    base = next(fake_raw_dir.glob("**/camels_ch"))
+    write_fake_catchments(base)
+    s = TrendSettings(
+        raw_dir=fake_raw_dir, gldas_raw_dir=tmp_path_factory.mktemp("gldas_raw"),
+        processed_dir=tmp_path_factory.mktemp("gldas_processed"),
+        window_years=5, min_window_years=3, filters=CatchmentFilter(min_valid_years=8),
+    )
+    weights = gldas.catchment_weights(base, ["2001", "2004"])
+    client = FakeGiovanni()
+    log = gldas.download(weights, s.gldas_raw_dir, start="2000-01-01", end="2012-12-31", chunk_years=5,
+                         workers=2, client=client)
+    return dict(results=pipeline.build_gldas(s, ["2001", "2004"]), weights=weights, log=log, client=client,
+                settings=s)

@@ -40,9 +40,16 @@ def annual_driver_metrics(daily: pd.DataFrame) -> pd.DataFrame:
         out["temp_mean"] = g["temperature_mean"].mean()
         out["temp_spring"] = df[month.isin((3, 4, 5))].groupby(["gauge_id", "hydro_year"])["temperature_mean"].mean()
         out["temp_summer"] = df[month.isin((6, 7, 8))].groupby(["gauge_id", "hydro_year"])["temperature_mean"].mean()
-        if "precipitation" in df:
+        if "precipitation" in df and "snowfall" not in df:
+            # No snowfall series (CAMELS-CH): approximate snow as precipitation on days <= 0 °C.
             snow = df["precipitation"].where(df["temperature_mean"] <= 0, 0.0)
             out["snowfall_frac"] = df.assign(_snow=snow).groupby(["gauge_id", "hydro_year"])["_snow"].sum() / out["precip_total_mm"]
+    if "snowfall" in df and "precip_total_mm" in out:
+        out["snowfall_frac"] = g["snowfall"].sum(min_count=300) / out["precip_total_mm"]
+    if "snowmelt" in df:
+        out["snowmelt_total_mm"] = g["snowmelt"].sum(min_count=300)
+    if "evap" in df:
+        out["evap_total_mm"] = g["evap"].sum(min_count=300)
     if "swe" in df:
         # SWE coverage can be shorter than the flow record; only use (nearly) complete years.
         complete = g["swe"].count() >= 330

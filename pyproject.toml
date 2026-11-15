@@ -11,6 +11,9 @@ dependencies = [
     "pymannkendall>=1.4.3",
     "plotly>=6.0",
     "requests>=2.31",
+    "pyshp>=2.3",
+    "pyproj>=3.6",
+    "shapely>=2.0",
 ]
 
 [project.optional-dependencies]

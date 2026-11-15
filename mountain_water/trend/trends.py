@@ -83,9 +83,11 @@ def trend_table(annual: pd.DataFrame, metrics: list[str], alpha: float = 0.05, m
                 pct_per_decade=(slope * 10 / mean * 100) if info(metric).relative and mean else np.nan,
                 p=mann_kendall_p(values),
             ))
-    out = pd.DataFrame(rows)
+    out = pd.DataFrame(rows, columns=[
+        "gauge_id", "metric", "kind", "n_years", "first_year", "last_year", "mean", "slope_per_decade",
+        "intercept", "pct_per_decade", "p"])
     if out.empty:
-        return out
+        return out.assign(p_fdr=np.nan, significant=False, significant_fdr=False, direction="")
     out["p_fdr"] = out.groupby("metric", group_keys=False)["p"].apply(benjamini_hochberg)
     out["significant"] = out["p"] < alpha
     out["significant_fdr"] = out["p_fdr"] < alpha
