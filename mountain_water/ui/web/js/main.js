@@ -61,7 +61,7 @@ function recall() {
   if (state.river?.startsWith('ch-')) state.river = state.river.slice(3);
   if (!OCCUPATIONS.some(o => o.id === state.occupation)) state.occupation = null;
   if (!catalog.datasets.some(d => d.id === state.dataset)) state.dataset = 'ch';
-  if (state.river && !state.country) state.country = selectedRiver()?.country || dataset()?.country || 'CH';
+  if (state.river && !state.country) state.country = dataset()?.country || selectedRiver()?.country || 'CH';
   if (!geodata.countries[state.country]) state.country = null;
   normalize();
 }
@@ -130,7 +130,7 @@ function openApp() {
     country: code => go({ country: code, river: null, dataset: code.toLowerCase() }),
     river: id => {
       const gauge = dataset()?.gauges.find(g => String(g.id) === String(id));
-      if (gauge) go({ river: String(id), country: gauge.country || state.country });
+      if (gauge) go({ river: String(id), country: dataset()?.country || gauge.country || state.country });
     },
     europe: () => go({ country: null, river: null }),
   });
@@ -200,7 +200,8 @@ function renderSide() {
     return;
   }
   if (!river) {
-    const gauges = (data?.gauges || []).filter(g => !g.country || g.country === state.country);
+    // CAMELS-CH includes bordering gauges; source region owns the navigation.
+    const gauges = (data?.gauges || []).filter(g => data.country || !g.country || g.country === state.country);
     side.innerHTML = `<button class="link back" data-action="europe">← Europe</button><h2>${esc(countryName(state.country))}</h2>${sourceHTML()}${data?.status !== 'ready' ? missingHTML(data) : `<p class="side-sub">Pick a river on the map or here.</p><p class="group-title">${data.kind === 'model' ? 'Modelled catchments' : data.kind === 'network' ? 'Stations' : 'Measured mountain rivers'} <span class="quiet">${gauges.length}</span></p><input class="river-search" id="river-search" type="search" placeholder="Find a river or station" aria-label="Find a river or station">${rowsHTML(gauges)}`}`;
     return;
   }
@@ -222,7 +223,8 @@ async function updateMap() {
   const data = dataset(), grouped = { CH: [], NO: [] };
   const sources = state.country ? [data] : catalog.datasets.filter(d => ['ch', 'no'].includes(d.id));
   for (const source of sources) for (const gauge of source?.gauges || []) {
-    if (grouped[gauge.country]) grouped[gauge.country].push({ ...gauge, id: String(gauge.id), name: riverName(gauge), place: gauge.place || gauge.name, measured: source.kind === 'observed' });
+    const region = source.country || gauge.country;
+    if (grouped[region]) grouped[region].push({ ...gauge, id: String(gauge.id), name: riverName(gauge), place: gauge.place || gauge.name, measured: source.kind === 'observed' });
   }
   map.setRivers(grouped);
   map.setCourses({ type: 'FeatureCollection', features: [] });
