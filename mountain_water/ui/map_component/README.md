@@ -13,9 +13,10 @@ interface as a whole.
   Switzerland for now).
 - After a country is chosen, zooms in and draws its rivers. A river can be
   chosen on the map or in the left box.
-- Large rivers are drawn as lines along their real course. Measured mountain
-  rivers are drawn as their upstream catchment with a dot at the measuring
-  point.
+- Large rivers are drawn as lines along their mapped course. Gauged rivers
+  use verified OpenStreetMap waterway segments where available, with a dot
+  at the measuring point. Missing courses stay as station points with an
+  unavailable explanation. Catchment polygons are not river courses.
 
 ## External sources used
 
@@ -25,7 +26,8 @@ interface as a whole.
 | Borders and place names | Esri World Boundaries and Places reference tiles | Same as above. |
 | Country outlines, and which large rivers are listed | Natural Earth 1:10m, public domain (naturalearthdata.com), files `ne_10m_admin_0_countries`, `ne_10m_rivers_lake_centerlines`, `ne_10m_rivers_europe` | Stored in `web/data/geodata.json`, produced by `build_geodata.py`. |
 | Courses and names of the large rivers | OpenStreetMap, © OpenStreetMap contributors, Open Database License (ODbL) | Fetched once by `build_geodata.py` through the public Overpass service and stored in `web/data/geodata.json`. The credit "rivers © OpenStreetMap contributors" on the map is required. Because the file holds data derived from OpenStreetMap, it may be shared only under the ODbL. |
-| Catchment outlines and measuring points of the measured rivers | CAMELS-CH catchment file, read through the trend section's dataset | Read at run time by `data_source.catchment_outlines()`, simplified to 60 m for drawing. Nothing is copied into the repository. |
+| Gauged-river segments | OpenStreetMap, Open Database License (ODbL) | `web/data/gauge_courses.geojson` stores the original source vertices, way IDs, source timestamps and matching information. Attribution: © OpenStreetMap contributors. Source-backed segments may cover only part of a river. |
+| Measuring points | Saved trend backend station attributes | Coordinates retain their source identity. A station point is not a complete river or catchment geometry. |
 | Map library | Leaflet 1.9.4 (BSD-2-Clause) | Kept in `web/vendor/leaflet/` with its licence; no longer loaded from a CDN. |
 
 These source notes, including vendored Leaflet, OpenStreetMap river courses
@@ -64,8 +66,45 @@ after it.
   hydrologist; it should be checked against NVE and FOEN before a demo. The
   tool prints which OpenStreetMap rivers it found for each Natural Earth name.
 - Norway's outline leaves out Svalbard, Jan Mayen and Bouvet Island.
-- The catchment outlines of measured rivers are simplified for drawing and
-  must not be used for calculations.
+- Gauged-river segments are for display only and do not establish complete
+  upstream coverage, a basin network or a validated hydrological match.
+
+## Gauged mountain rivers
+
+`build_gauge_courses.py` reads existing gauge metadata and cached OpenStreetMap
+ways. Its optional `--fetch` switch makes one bounded query for river/stream
+ways within 1.5 km of at most 40 gauges; it never requests observations. The
+application itself makes no geometry downloads. Query results stay in an
+ignored cache; only selected display segments are distributed.
+
+Matching requires a normalized provider river name or its explicit alias,
+a source segment within 150 m of the measuring point, and connected original
+OpenStreetMap vertices. Conflicting nearby components are rejected. No line
+is invented between disconnected pieces. The file records source way IDs,
+OpenStreetMap base timestamps and retrieval timestamps where known; an
+inherited cache without a retrieval timestamp is not given an invented date.
+
+The bundled geometry is derived from OpenStreetMap and distributed under the
+[Open Database License](https://opendatacommons.org/licenses/odbl/1-0/).
+Keep visible [OpenStreetMap attribution](https://www.openstreetmap.org/copyright)
+on maps. OpenStreetMap documents
+[`waterway=river`](https://wiki.openstreetmap.org/wiki/Tag:waterway%3Driver)
+as the linear river course. Its
+[Overpass usage guidance](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html)
+supports caching bounded queries rather than using public servers as an
+application backend.
+
+To rebuild from a locally prepared JSON list of gauge dictionaries
+(`id`, `country`, `river`, `name`, `lat`, `lon`):
+
+```text
+python mountain_water/ui/map_component/build_gauge_courses.py --gauges tmp/gauges.json --cache-dir tmp/gauge-course-cache --fetch
+```
+
+Omit `--fetch` to rebuild entirely from the cached responses. The runtime
+reader also rechecks gauge identity, river name and coordinates before using
+a stored course. Every unavailable course has a reason in the returned
+GeoJSON collection's `missing` mapping.
 
 ## Rebuilding
 
