@@ -17,6 +17,7 @@ Jonathan's trend code, saved datasets and tests are unchanged. Original branches
 - CSV verification exported all 366 daily records for the selected year plus a header while displaying only 40 table rows per page. Page navigation and missing-value handling remain separate from export.
 - Missing GLDAS comparisons and Norwegian builds show the backend build command without a chart or stale export. A simulated reload failure cleared the prior chart/table and disabled export; restoring the request and reloading recovered the selected analysis.
 - Expand, fullscreen/Escape, the draggable map divider and the separately labelled synthetic 3D surface were checked. The surface cannot export observed records. Narrow-screen panel stacking was verified at 390 px with no page-width overflow.
+- Backend charts retain readable content widths inside horizontally scrolling viewports. Fullscreen preserves the native height of long station figures instead of compressing their rows.
 - Independent read-only software review checked API mapping, request cancellation, state clearing, exports and map contracts. Its aggregate-scope and paired-coverage wording findings were corrected.
 - The diff from aeae844 leaves `mountain_water/trend`, `tests/trend`, the Python UI backend and HTTP server unchanged. Existing branches and earlier UI versions remain preserved.
 

@@ -278,7 +278,7 @@ async function drawFigure(figure) {
   });
   delete layout.width;
   const height = Number(figure.layout?.height) || 330;
-  layout.height = state.full ? Math.max(260, innerHeight - 125) : Math.max(state.expanded ? 440 : 330, height);
+  layout.height = Math.max(height, state.full ? Math.max(260, innerHeight - 125) : state.expanded ? 440 : 330);
   $('#figure-status').hidden = true;
   const chart = $('#chart'); chart.hidden = false;
   // A narrow panel scrolls the figure instead of crushing axes or station labels.
