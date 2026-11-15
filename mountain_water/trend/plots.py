@@ -70,7 +70,18 @@ def _date_axis(fig: go.Figure) -> None:
 
 
 def _label(results, gauge_id: str) -> str:
-    return results.gauge_label(gauge_id)
+    suffix = " · GLDAS-2.1" if results.meta.get("source") == "gldas" else ""
+    return results.gauge_label(gauge_id) + suffix
+
+
+def _flow(results) -> str:
+    """'Discharge' for gauge observations, 'GLDAS runoff' for modelled runoff."""
+    return results.meta.get("flow_label", "Discharge")
+
+
+def _flow_axis(results) -> str:
+    unit = "m³/s equivalent" if results.meta.get("source") == "gldas" else "m³/s"
+    return f"{_flow(results)} ({unit})"
 
 
 def _trend_row(results, gauge_id: str, metric: str) -> pd.Series | None:
@@ -113,8 +124,8 @@ def hydrograph_vs_history(results, gauge_id: str, year: int, reference: tuple[in
     ))
     ref = f"{reference[0]}–{reference[1]}" if reference else "all valid years"
     _layout(fig, f"{_label(results, gauge_id)}: flow in {year} vs history", theme,
-            subtitle=f"Daily discharge; bands are percentiles per calendar day over {ref}",
-            hovermode="x unified", yaxis_title="Discharge (m³/s)")
+            subtitle=f"Daily {_flow(results).lower()}; bands are percentiles per calendar day over {ref}",
+            hovermode="x unified", yaxis_title=_flow_axis(results))
     _date_axis(fig)
     return fig
 
@@ -133,9 +144,9 @@ def regime_by_window(results, gauge_id: str, normalized: bool = False, theme: st
         fig.add_trace(go.Scatter(x=_doy_dates(r["hydro_doy"], sm), y=r["mean"], name=w,
                                  line=dict(color=color, width=2)))
     _layout(fig, f"{_label(results, gauge_id)}: seasonal flow regime by decade", theme,
-            subtitle="Mean daily discharge per window (15-day smoothing)" + (", relative to the window's annual mean" if normalized else ""),
+            subtitle=f"Mean daily {_flow(results).lower()} per window (15-day smoothing)" + (", relative to the window's annual mean" if normalized else ""),
             hovermode="x unified",
-            yaxis_title="Flow / annual mean" if normalized else "Discharge (m³/s)", legend_title_text="Window")
+            yaxis_title="Flow / annual mean" if normalized else _flow_axis(results), legend_title_text="Window")
     _date_axis(fig)
     return fig
 
@@ -192,7 +203,7 @@ def daily_heatmap(results, gauge_id: str, log_scale: bool = True, theme: str = "
         hovertemplate="%{x|%d %b} %{y}: %{customdata:.2f} m³/s<extra></extra>",
         colorbar=dict(title="log₁₀ m³/s" if log_scale else "m³/s", outlinewidth=0),
     ))
-    _layout(fig, f"{_label(results, gauge_id)}: daily discharge by year", theme,
+    _layout(fig, f"{_label(results, gauge_id)}: daily {_flow(results).lower()} by year", theme,
             subtitle="Each row is one hydrological year; darker = more water", yaxis_title="Hydrological year")
     _date_axis(fig)
     fig.update_xaxes(showgrid=False)
@@ -420,4 +431,81 @@ def selection_summary(results, theme: str = "light") -> go.Figure:
     _layout(fig, "Catchment selection", theme, subtitle="Catchments remaining after each filter step",
             xaxis_title="Catchments", showlegend=False, height=120 + 50 * len(s))
     fig.update_yaxes(autorange="reversed", showgrid=False)
+    return fig
+
+
+# --------------------------------------------------------------------------- observed vs GLDAS
+
+
+def source_regime(obs, model, gauge_id: str, theme: str = "light") -> go.Figure:
+    """Observed discharge vs GLDAS runoff: mean seasonal hydrograph over the common years."""
+    from .sources import regime_pair
+
+    t = THEMES[theme]
+    reg = regime_pair(obs, model, gauge_id)
+    x = _doy_dates(reg["hydro_doy"], _start_month(obs))
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=x, y=reg["observed"], name="Observed discharge (CAMELS-CH)",
+                             line=dict(color=t["series"][0], width=2)))
+    fig.add_trace(go.Scatter(x=x, y=reg["gldas"], name="GLDAS-2.1 runoff (unrouted)",
+                             line=dict(color=t["series"][1], width=2)))
+    years = reg.attrs.get("years")
+    _layout(fig, f"{obs.gauge_label(gauge_id)}: observed vs GLDAS", theme,
+            subtitle=f"Mean daily flow {years[0]}–{years[1]} (15-day smoothing); GLDAS converted to m³/s with the "
+                     "catchment area" if years else None,
+            hovermode="x unified", yaxis_title="m³/s", legend=dict(orientation="h", y=-0.15))
+    _date_axis(fig)
+    return fig
+
+
+def source_scatter(annual_cmp: pd.DataFrame, obs, metric: str, value: str = "mean",
+                   theme: str = "light") -> go.Figure:
+    """One point per catchment: observed vs GLDAS (mean over common years) with the 1:1 line."""
+    t = THEMES[theme]
+    d = annual_cmp[annual_cmp["metric"] == metric].copy()
+    d["label"] = d["gauge_id"].map(obs.gauge_label)
+    x, y = d[f"{value}_obs"], d[f"{value}_model"]
+    lo = float(np.nanmin([x.min(), y.min()])) if len(d) else 0.0
+    hi = float(np.nanmax([x.max(), y.max()])) if len(d) else 1.0
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", name="1:1",
+                             line=dict(color=t["axis"], width=1), hoverinfo="skip"))
+    fig.add_trace(go.Scatter(
+        x=x, y=y, mode="markers", name="Catchment", text=d["label"], customdata=d[["r", "n_years"]],
+        marker=dict(color=t["series"][0], size=10, line=dict(color=t["surface"], width=2)),
+        hovertemplate="%{text}<br>observed %{x:.1f}, GLDAS %{y:.1f}<br>r = %{customdata[0]:.2f} "
+                      "(%{customdata[1]} years)<extra></extra>",
+    ))
+    med_r = d["r"].median()
+    _layout(fig, f"{info(metric).label}: observed vs GLDAS", theme,
+            subtitle=f"Catchment means over common years; median year-to-year r = {med_r:.2f}" if len(d) else None,
+            xaxis_title=f"Observed — {axis_label(metric)}", yaxis_title=f"GLDAS — {axis_label(metric)}",
+            showlegend=False)
+    return fig
+
+
+def source_trend_scatter(trend_cmp: pd.DataFrame, obs, metric: str, theme: str = "light") -> go.Figure:
+    """Trend per decade from observations vs from GLDAS over the same years, one point per catchment."""
+    t = THEMES[theme]
+    rel = info(metric).relative
+    col = "pct_per_decade" if rel else "slope_per_decade"
+    d = trend_cmp[trend_cmp["metric"] == metric].copy()
+    d["label"] = d["gauge_id"].map(obs.gauge_label)
+    x, y = d[f"{col}_obs"], d[f"{col}_model"]
+    lim = float(np.nanmax(np.abs(pd.concat([x, y])))) if len(d) else 1.0
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[-lim, lim], y=[-lim, lim], mode="lines", line=dict(color=t["axis"], width=1),
+                             hoverinfo="skip", showlegend=False))
+    fig.add_hline(y=0, line=dict(color=t["grid"], width=1))
+    fig.add_vline(x=0, line=dict(color=t["grid"], width=1))
+    fig.add_trace(go.Scatter(
+        x=x, y=y, mode="markers", text=d["label"], showlegend=False,
+        marker=dict(color=t["series"][0], size=10, line=dict(color=t["surface"], width=2)),
+        hovertemplate="%{text}<br>observed %{x:+.1f}, GLDAS %{y:+.1f}<extra></extra>",
+    ))
+    unit = "% per decade" if rel else f"{info(metric).unit.replace('day of hydro year', 'days')} per decade"
+    share = d["same_direction"].mean() * 100 if len(d) else np.nan
+    _layout(fig, f"{info(metric).label}: trend from observations vs GLDAS", theme,
+            subtitle=f"Sen's slope over common years; same direction in {share:.0f} % of catchments",
+            xaxis_title=f"Observed ({unit})", yaxis_title=f"GLDAS ({unit})")
     return fig
