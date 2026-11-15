@@ -8,4 +8,4 @@ Generated implementation from the earlier scope was preserved on archive/generat
 
 The historical preparation record remains dated and intact. Record actual work and AI assistance without backdating or concealing it. The team must verify current official challenge rules, Local Event deadlines, submissions and attribution requirements. Research access gaps remain recorded in the reference pack.
 
-This delivery includes no live integration, computed scientific result or deployment. Existing Supabase documentation-only and disabled Vercel permissions remain unchanged.
+This delivery includes no live integration, computed scientific result or deployment. Repository-local service connections and editor-extension configuration were removed at the user's request on 2026-11-15. Separately installed account or GitHub integrations are outside those configuration files.

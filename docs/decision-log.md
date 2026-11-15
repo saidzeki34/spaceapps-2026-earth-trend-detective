@@ -11,3 +11,4 @@
 | 2026-11-15 | No algorithms, integrations, UI, models, database schemas or tests in this delivery | Explicit scope limit |
 | 2026-11-15 | Reorganize placeholders into ui and trend first, risk_assessment later, predictionmodel much later; shared holds common inputs and source access | User's section proposal; documentation and empty files only |
 | 2026-11-15 | Move historical analysis to trend, figures to ui/charts, models to predictionmodel and data/services/contracts/config to shared; add subsection placeholders | No implementation imported from the archive; risk_assessment uses the corrected spelling |
+| 2026-11-15 | Remove repository-local Supabase/Vercel connections, VS Code extension recommendations and Dev Container setup; teammates choose local tooling | User request; preserve project skeleton and Git workflow. Provider-side GitHub app connections are separate. |
