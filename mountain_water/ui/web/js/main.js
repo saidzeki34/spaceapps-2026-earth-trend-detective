@@ -243,6 +243,10 @@ function renderTimeline() {
   const years = dataset()?.years || [];
   const selectable = selectedView()?.options.some(o => o.name === 'year') && !isDemo();
   if (!years.length || isDemo()) { $('#timeline').innerHTML = '<p class="quiet">Synthetic demonstration only · no river record or prediction</p>'; return; }
+  if (selectedView()?.scope === 'sources') {
+    $('#timeline').innerHTML = '<p class="quiet">Observed / GLDAS comparison · common saved coverage is reported with the chart</p>';
+    return;
+  }
   const first = years[0], last = years.at(-1);
   const calendar = state.dataset === 'stations' ? 'calendar years' : 'hydrological years';
   if (!selectable) { $('#timeline').innerHTML = `<div class="timeline-year">${first}–${last}</div><p class="quiet">Saved ${calendar} · this analysis uses the full saved record</p>`; return; }
@@ -253,7 +257,9 @@ function renderTimeline() {
 
 function resultsShell() {
   const river = selectedRiver(), spec = selectedView();
-  $('#results').innerHTML = `<header class="results-head"><div><h2>${esc(riverName(river))}${river?.place ? ` <small>at ${esc(river.place)}</small>` : ''}</h2><p class="results-meta" id="results-meta">${esc(dataset()?.label)}</p></div><div class="head-actions"><button class="link" data-action="expand">${state.expanded ? 'Show the map' : 'Expand'}</button></div></header>
+  const riverScope = spec?.scope === 'catchment' || spec?.id === 'source_regime';
+  const heading = isDemo() ? 'Synthetic 3D surface' : riverScope ? `${esc(riverName(river))}${river?.place ? ` <small>at ${esc(river.place)}</small>` : ''}` : esc(spec?.scope === 'stations' ? 'Station network' : countryName(state.country));
+  $('#results').innerHTML = `<header class="results-head"><div><h2>${heading}</h2><p class="results-meta" id="results-meta">${esc(dataset()?.label)} · ${esc(SCOPES[spec?.scope] || 'Synthetic demonstration')}</p></div><div class="head-actions"><button class="link" data-action="expand">${state.expanded ? 'Show the map' : 'Expand'}</button></div></header>
     <div class="results-scroll"><figure class="graph${state.full ? ' full' : ''}" id="graph"><div class="graph-title">${esc(spec?.label || 'Synthetic 3D surface')}</div><p class="message" id="figure-status">Reading the saved river record…</p><div class="chart backend-chart" id="chart" hidden></div><div class="graph-foot"><span>${['timeseries', 'hydrograph_vs_history'].includes(state.view) ? `<label><input type="checkbox" id="usual" ${state.view === 'hydrograph_vs_history' ? 'checked' : ''}> Compare discharge with a usual year</label>` : esc(spec?.label || 'Synthetic demonstration')}</span><button class="link" data-action="full">${state.full ? 'Close full screen' : 'Full screen'}</button></div></figure><div id="figure-notes"></div><section class="block" id="records" ${state.statistics && !isDemo() ? '' : 'hidden'}><h3>Statistics and saved records</h3><p class="backend-note" id="row-count"></p><button class="link" id="download" disabled>Download CSV</button><div class="table-scroll backend-table" id="table-wrap"></div><div class="backend-pagination" id="pagination"></div></section></div>`;
 }
 
