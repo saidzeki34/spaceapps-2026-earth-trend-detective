@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RivaScope map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent;
+    font-family: "Source Sans Pro", "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #map { position: absolute; inset: 0; border-radius: 14px; overflow: hidden; background: #08111f; }
+  #message { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; color: #dbeafe; background: #08111f; border-radius: 14px;
+    font-size: 15px; line-height: 1.5; z-index: 2000; }
+  .leaflet-container { background: #08111f; font: inherit; }
+  .leaflet-interactive:focus { outline: none; }
+  .leaflet-control-attribution { background: rgba(8, 17, 31, .62) !important; color: #b6c5d8 !important;
+    font-size: 10px; }
+  .leaflet-control-attribution a { color: #cfe6ff !important; }
+  .leaflet-bar a { background: rgba(8, 17, 31, .82); color: #e6f1ff; border-color: rgba(255, 255, 255, .16); }
+  .leaflet-bar a:hover { background: #12233b; color: #fff; }
+
+  .country-chip { transform: translate(-50%, -50%); white-space: nowrap; cursor: pointer;
+    padding: 5px 12px 5px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: .02em;
+    color: #06101d; background: #d9f3ff; border: 1px solid #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .45), 0 0 0 4px rgba(125, 211, 252, .25);
+    transition: transform .15s ease, background .15s ease; position: absolute; }
+  .country-chip::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: #0b74c9; margin-right: 7px; vertical-align: 1px; }
+  .country-chip:hover { background: #fff; transform: translate(-50%, -50%) scale(1.06); }
+
+  .rs-tip { background: rgba(8, 17, 31, .9); color: #f1f7ff; border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 8px; padding: 4px 9px; font-size: 12.500px; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+  .rs-tip::before { display: none; }
+  .rs-tip small { display: block; font-weight: 400; color: #a9bdd6; font-size: 11px; }
+  .rs-tip.selected { background: #fde68a; color: #1c1503; border-color: #fff7d1; }
+
+  .rs-hint { background: rgba(8, 17, 31, .82); color: #e6f1ff; padding: 7px 12px; border-radius: 10px;
+    font-size: 12.500px; border: 1px solid rgba(255, 255, 255, .14); max-width: 300px; line-height: 1.35; }
+  .rs-back { background: rgba(8, 17, 31, .82); color: #e6f1ff; padding: 6px 11px; border-radius: 8px;
+    font-size: 12.500px; font-weight: 600; border: 1px solid rgba(255, 255, 255, .16); cursor: pointer; }
+  .rs-back:hover { background: #12233b; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="message"></div>
+<script>
+(function () {
+  "use strict";
+
+  // ---- Minimal Streamlit component protocol (no build step needed) ----
+  function post(type, data) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*");
+  }
+  function sendEvent(kind, id) {
+    // "seq" lets the Python side tell a fresh click from a repeated value.
+    post("streamlit:setComponentValue", { value: { kind: kind, id: id || null, seq: Date.now() }, dataType: "json" });
+  }
+
+  var EUROPE_BOUNDS = [[43.000, -4.000], [71.600, 30.000]];
+  var COLORS = { border: "#8ee3ff", borderQuiet: "#f2f9ff", river: "#2cbcff", riverDim: "#2a9fdc", selected: "#fde047" };
+
+  var map = null, geodata = null, args = null, applied = null;
+  var countryLayers = {}, chipLayers = {}, riverGroup = null, riverLayers = {}, hintControl = null, backControl = null;
+
+  function showMessage(text) {
+    var el = document.getElementById("message");
+    el.textContent = text;
+    el.style.display = "flex";
+  }
+
+  function init() {
+    if (typeof L === "undefined") {
+      showMessage("The map library could not be loaded. Check the internet connection and reload.");
+      return;
+    }
+    map = L.map("map", {
+      zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 3, maxZoom: 13, worldCopyJump: true,
+      maxBounds: [[20, -45], [82, 70]], maxBoundsViscosity: 0.6, attributionControl: true
+    });
+    map.attributionControl.setPrefix(false);
+    map.createPane("reference").style.zIndex = 250;
+    map.createPane("shade").style.zIndex = 300;
+    map.createPane("countries").style.zIndex = 410;
+    map.createPane("rivers").style.zIndex = 450;
+    map.getPane("reference").style.pointerEvents = "none";
+    map.getPane("shade").style.pointerEvents = "none";
+
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 13,
+      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics, GIS User Community"
+    }).addTo(map);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 13, pane: "reference", attribution: "Borders and labels &copy; Esri"
+    }).addTo(map);
+
+    // Shade everything except the countries that can be explored.
+    var world = [[-89, -360], [-89, 360], [89, 360], [89, -360]];
+    var holes = [];
+    Object.keys(geodata.countries).forEach(function (code) {
+      geodata.countries[code].polygons.forEach(function (polygon) { holes.push(polygon[0]); });
+    });
+    L.polygon([world].concat(holes), {
+      pane: "shade", stroke: false, fillColor: "#030812", fillOpacity: 0.6, interactive: false
+    }).addTo(map);
+
+    Object.keys(geodata.countries).forEach(function (code) {
+      var country = geodata.countries[code];
+      var layer = L.polygon(country.polygons, {
+        pane: "countries", color: COLORS.border, weight: 1.6, opacity: 0.95,
+        fillColor: "#bfeaff", fillOpacity: 0, lineJoin: "round"
+      }).addTo(map);
+      layer.on("mouseover", function () {
+        if (applied && applied.country === code) { return; }
+        layer.setStyle({ fillOpacity: 0.16, weight: 2.4 });
+      });
+      layer.on("mouseout", function () { layer.setStyle(borderStyle(code)); });
+      layer.on("click", function () {
+        if (applied && applied.country === code) { return; }
+        sendEvent("country", code);
+      });
+      countryLayers[code] = layer;
+
+      var chip = L.marker(chipPosition(code, country), {
+        pane: "rivers", keyboard: true, title: "Explore " + country.name,
+        icon: L.divIcon({ className: "", iconSize: [0, 0], html: '<div class="country-chip">' + country.name + "</div>" })
+      });
+      chip.on("click", function () { sendEvent("country", code); });
+      chipLayers[code] = chip;
+    });
+
+    riverGroup = L.layerGroup().addTo(map);
+
+    hintControl = L.control({ position: "topright" });
+    hintControl.onAdd = function () { return L.DomUtil.create("div", "rs-hint"); };
+    hintControl.addTo(map);
+
+    backControl = L.control({ position: "topleft" });
+    backControl.onAdd = function () {
+      var el = L.DomUtil.create("div", "rs-back");
+      el.textContent = "← Europe";
+      el.title = "Back to the Europe map";
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.on(el, "click", function () { sendEvent("europe"); });
+      return el;
+    };
+
+    map.fitBounds(EUROPE_BOUNDS, { animate: false });
+  }
+
+  function borderStyle(code) {
+    // Bright outline while choosing a country; quiet once inside one, so rivers stand out.
+    var chosen = applied && applied.country;
+    if (!chosen) { return { color: COLORS.border, weight: 1.6, opacity: 0.95, fillOpacity: 0 }; }
+    return { color: COLORS.borderQuiet, weight: 1.2, opacity: code === chosen ? 0.85 : 0.4, fillOpacity: 0 };
+  }
+
+  function chipPosition(code, country) {
+    // Visual label anchors inside the largest land part of each country.
+    if (code === "NO") { return [61.300, 9.000]; }
+    var b = country.bounds;
+    return [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2];
+  }
+
+  function findRiver(code, riverId) {
+    var list = (geodata.rivers[code] || []);
+    for (var i = 0; i < list.length; i++) { if (list[i].id === riverId) { return list[i]; } }
+    return null;
+  }
+
+  function drawRivers(code, selectedId) {
+    riverGroup.clearLayers();
+    riverLayers = {};
+    if (!code) { return; }
+    (geodata.rivers[code] || []).forEach(function (river) {
+      var isSelected = river.id === selectedId;
+      var dim = selectedId && !isSelected;
+      var glow = L.polyline(river.lines, {
+        pane: "rivers", color: isSelected ? COLORS.selected : COLORS.river,
+        weight: isSelected ? 9 : 6, opacity: isSelected ? 0.3 : (dim ? 0.1 : 0.22), interactive: false, lineCap: "round"
+      });
+      var core = L.polyline(river.lines, {
+        pane: "rivers", color: isSelected ? COLORS.selected : (dim ? COLORS.riverDim : COLORS.river),
+        weight: isSelected ? 3.6 : 2.4, opacity: dim ? 0.65 : 1, interactive: false, lineCap: "round", lineJoin: "round"
+      });
+      // Wide invisible line so the river is easy to hit with the pointer.
+      var hit = L.polyline(river.lines, { pane: "rivers", color: "#fff", weight: 18, opacity: 0, lineCap: "round" });
+      hit.bindTooltip(river.name + (isSelected ? "" : "<small>Click to open</small>"),
+        { sticky: true, direction: "top", offset: [0, -8], className: "rs-tip" });
+      hit.on("mouseover", function () { if (!isSelected) { core.setStyle({ weight: 4.2, color: "#e6fbff", opacity: 1 }); } });
+      hit.on("mouseout", function () {
+        if (!isSelected) { core.setStyle({ weight: 2.4, color: dim ? COLORS.riverDim : COLORS.river, opacity: dim ? 0.65 : 1 }); }
+      });
+      hit.on("click", function () { if (!isSelected) { sendEvent("river", river.id); } });
+      riverGroup.addLayer(glow); riverGroup.addLayer(core); riverGroup.addLayer(hit);
+      if (isSelected) {
+        var label = L.tooltip({ permanent: true, direction: "top", className: "rs-tip selected", offset: [0, -6] })
+          .setLatLng(nearestVertexToCentre(river)).setContent(river.name);
+        riverGroup.addLayer(label);
+      }
+      riverLayers[river.id] = core;
+    });
+  }
+
+  function nearestVertexToCentre(river) {
+    var b = river.bounds, cLat = (b[0][0] + b[1][0]) / 2, cLon = (b[0][1] + b[1][1]) / 2, best = null, bestD = Infinity;
+    river.lines.forEach(function (line) {
+      line.forEach(function (p) {
+        var d = (p[0] - cLat) * (p[0] - cLat) + (p[1] - cLon) * (p[1] - cLon);
+        if (d < bestD) { bestD = d; best = p; }
+      });
+    });
+    return best;
+  }
+
+  function padded(bounds, fraction) {
+    return L.latLngBounds(bounds).pad(fraction);
+  }
+
+  function apply(next, first) {
+    var country = next.country && geodata.countries[next.country] ? next.country : null;
+    var river = country && next.river ? findRiver(country, next.river) : null;
+    var changedCountry = !applied || applied.country !== country;
+    var changedRiver = !applied || applied.river !== (river ? river.id : null);
+    var previousRiver = applied ? applied.river : null;
+
+    Object.keys(chipLayers).forEach(function (code) {
+      if (!country) { chipLayers[code].addTo(map); } else { map.removeLayer(chipLayers[code]); }
+    });
+    applied = { country: country, river: previousRiver };
+    Object.keys(countryLayers).forEach(function (code) { countryLayers[code].setStyle(borderStyle(code)); });
+    if (country) { backControl.addTo(map); } else { backControl.remove(); }
+
+    if (changedCountry || changedRiver) { drawRivers(country, river ? river.id : null); }
+
+    var hint = hintControl.getContainer();
+    if (!country) { hint.textContent = "Click Norway or Switzerland to see its rivers."; }
+    else if (!river) { hint.textContent = "Click a river on the map, or pick one from the list on the left."; }
+    else { hint.textContent = river.name + " selected. Click another river to switch."; }
+
+    if (changedCountry || changedRiver || first) {
+      var target = river ? padded(river.bounds, 0.35) : country ? padded(geodata.countries[country].bounds, 0.06)
+        : L.latLngBounds(EUROPE_BOUNDS);
+      var options = { maxZoom: river ? 10 : 9, duration: 1.1, easeLinearity: 0.2 };
+      if (first && river) {
+        // Start from the country so the zoom to the river reads as a continuation.
+        map.fitBounds(padded(geodata.countries[country].bounds, 0.06), { animate: false });
+        setTimeout(function () { map.flyToBounds(target, options); }, 350);
+      } else if (first) {
+        map.fitBounds(target, { animate: false, maxZoom: options.maxZoom });
+      } else {
+        map.flyToBounds(target, options);
+      }
+    }
+    applied = { country: country, river: river ? river.id : null };
+  }
+
+  var starting = false;
+
+  function onRender(event) {
+    args = event.data.args || {};
+    var height = args.height || 600;
+    post("streamlit:setFrameHeight", { height: height });
+    if (!geodata || starting) { return; }   // applied once the geometry and the frame are ready
+    if (map) {
+      map.invalidateSize();
+      apply(args, false);
+      return;
+    }
+    // The frame grows to its height a moment after it is asked to. Fitting the
+    // map before that would use a tiny size and zoom far out, so wait for it.
+    starting = true;
+    var deadline = Date.now() + 1500;
+    (function whenSized() {
+      if (window.innerHeight < height - 4 && Date.now() < deadline) { setTimeout(whenSized, 30); return; }
+      starting = false;
+      init();
+      if (map) { apply(args, true); }
+    })();
+  }
+
+  window.addEventListener("resize", function () { if (map) { map.invalidateSize(); } });
+
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "streamlit:render") { onRender(event); }
+  });
+
+  fetch("geodata.json")
+    .then(function (response) { return response.json(); })
+    .then(function (data) {
+      geodata = data;
+      if (args) { onRender({ data: { args: args } }); }
+    })
+    .catch(function () { showMessage("The map outlines could not be loaded."); });
+
+  post("streamlit:componentReady", { apiVersion: 1 });
+})();
+</script>
+</body>
+</html>
