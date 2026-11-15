@@ -266,12 +266,22 @@ function resultsShell() {
 async function drawFigure(figure) {
   if (!window.Plotly) throw new Error('The chart library could not be loaded. Please reload the window.');
   const layout = { ...(figure.layout || {}), autosize: true, paper_bgcolor: '#fdfcfa', plot_bgcolor: '#fdfcfa', font: { ...(figure.layout?.font || {}), family: 'Segoe UI, system-ui, sans-serif', color: '#555c58' } };
+  // Match Claude's variable swatches without changing any backend values or units.
+  const variables = String(state.options.variable || '').split(',');
+  const traces = (figure.data || []).map((trace, i) => {
+    if (state.view !== 'timeseries') return trace;
+    const color = COLORS[variables[i]] || '#7a5aa8';
+    const axisName = i === 0 ? 'yaxis' : `yaxis${i + 1}`;
+    const axis = layout[axisName] || {};
+    layout[axisName] = { ...axis, title: { ...axis.title, font: { ...axis.title?.font, color } }, tickfont: { ...axis.tickfont, color } };
+    return { ...trace, line: { ...trace.line, color }, marker: { ...trace.marker, color } };
+  });
   delete layout.width;
   const height = Number(figure.layout?.height) || 330;
   layout.height = state.full ? Math.max(260, innerHeight - 125) : Math.max(state.expanded ? 440 : 330, height);
   $('#figure-status').hidden = true;
   const chart = $('#chart'); chart.hidden = false;
-  await Plotly.react(chart, figure.data || [], layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false });
+  await Plotly.react(chart, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false });
 }
 
 function showUnavailable(payload) {

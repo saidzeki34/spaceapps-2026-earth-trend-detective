@@ -279,3 +279,28 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .backend-pagination { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 13px; }
 .check:has(input:disabled) { color: var(--ink-3); cursor: default; }
 .topbar-right { flex-wrap: wrap; }
+
+/* The same panels stack when the desktop columns no longer fit. */
+@media (max-width: 760px) {
+  #app { height: auto; min-height: 100%; }
+  .topbar { height: auto; min-height: var(--bar-h); flex-wrap: wrap; gap: 10px 16px; padding: 12px; }
+  .crumbs { flex-wrap: wrap; }
+  .topbar-right { width: 100%; margin-left: 0; justify-content: space-between; gap: 10px; }
+  .occupation-switch { min-width: 0; }
+  .occupation-switch select { min-width: 0; max-width: 235px; }
+  .layout, .layout.has-river, .layout.has-river.expanded {
+    flex: none; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; gap: 12px; padding: 0 12px 12px;
+  }
+  .layout { grid-template-areas: "side" "map"; }
+  .layout.has-river { grid-template-areas: "side" "map" "time" "results"; }
+  .layout.has-river.expanded { grid-template-areas: "side" "results" "time"; }
+  .layout.has-river .grip { display: none; }
+  .layout.has-river .side { margin-right: 0; }
+  .side { max-height: 45vh; }
+  .mapwrap { height: 42vh; min-height: 260px; }
+  .results-scroll { flex: none; overflow: visible; padding: 14px 12px 24px; }
+  .results-head { padding: 14px 12px; }
+  .results-head h2 { font-size: 23px; }
+  .graph-foot { flex-wrap: wrap; }
+  .graph.full { padding: 18px 12px; }
+}
