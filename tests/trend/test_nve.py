@@ -69,9 +69,9 @@ class FakeNve:
                           "geometry": {"type": "Polygon", "coordinates": [ring]}})
         return {"type": "FeatureCollection", "features": feats}
 
-    def senorge(self, theme, rings, start, end):
+    def senorge_point(self, theme, x, y, start, end):
         self.calls["senorge"] += 1
-        assert rings and len(rings[0]) >= 4
+        assert 0 < x < 1_100_000 and 6_000_000 < y < 8_000_000  # UTM 33N metres
         d = pd.date_range(start, end, freq="D")
         doy = d.day_of_year.to_numpy()
         years = (d.year.to_numpy() - 1990) / 10
@@ -83,17 +83,27 @@ class FakeNve:
         }[theme]
         values = np.round(values, 2).tolist()
         values[3] = 65535
-        return {"Theme": theme, "NoDataValue": 65535, "TimeResolution": 1440, "Unit": "mm", "Data": values}
+        return {"Theme": theme, "NoDataValue": 65535, "X": x, "Y": y, "StartDate": f"{d[0]:%d.%m.%Y} 06:00:00",
+                "TimeResolution": 1440, "Unit": "mm", "Data": values}
 
 
 @pytest.fixture(scope="module")
 def nve_setup(tmp_path_factory):
     raw = tmp_path_factory.mktemp("nve_raw")
     client = FakeNve()
-    log = nve.download(raw, start=START, end=END, min_years=15, chunk_years=10, workers=2, client=client)
+    log = nve.download(raw, start=START, end=END, min_years=15, workers=2, client=client)
     s = TrendSettings.nve(nve_raw_dir=raw, processed_dir=tmp_path_factory.mktemp("nve_processed"))
     s.filters.min_valid_years = 15
     return dict(raw=raw, client=client, log=log, results=pipeline.build_nve(s), settings=s)
+
+
+def test_sample_points_cover_catchment():
+    from shapely.geometry import box
+
+    small, large = box(0, 6_900_000, 2_000, 6_901_000), box(0, 6_900_000, 20_000, 6_925_000)  # 2 and 500 km²
+    assert nve.sample_points(small) == [(500, 6_900_500), (1500, 6_900_500)]
+    pts = nve.sample_points(large)
+    assert 15 <= len(pts) <= 25 and all(large.contains(__import__("shapely").Point(p)) for p in pts)
 
 
 def test_station_attributes_and_candidates():
@@ -132,8 +142,11 @@ def test_parse_discharge_uses_local_dates():
 
 
 def test_parse_senorge_nodata():
-    s = nve.parse_senorge({"Data": [1, 65535, 3], "NoDataValue": 65535, "TimeResolution": 1440}, "2001-01-01")
-    assert np.isnan(s.iloc[1]) and s.index[2] == pd.Timestamp("2001-01-03")
+    # Shape of the real point response (GridTimeSeries/{x}/{y}/{start}/{end}/rr.json, 2026-11-15)
+    payload = {"Theme": "rr", "NoDataValue": 65535, "StartDate": "01.01.2000 06:00:00",
+               "EndDate": "03.01.2000 06:00:00", "TimeResolution": 1440, "Data": [7.9, 65535, 0]}
+    s = nve.parse_senorge(payload, "1999-12-31")
+    assert np.isnan(s.iloc[1]) and s.index[0] == pd.Timestamp("2000-01-01") and s.index[2] == pd.Timestamp("2000-01-03")
     with pytest.raises(ValueError):
         nve.parse_senorge({"Data": [1], "TimeResolution": 60}, "2001-01-01")
 
@@ -145,7 +158,7 @@ def test_download_only_candidates_and_resumes(nve_setup):
     polygons, _ = nve.load_catchments(raw, ["2.11.0"])  # "2.11" in the layer matches "2.11.0"
     assert polygons["2.11.0"].area / 1e6 == pytest.approx(120, rel=1e-3)
     before = dict(client.calls)
-    again = nve.download(raw, start=START, end=END, min_years=15, chunk_years=10, client=client)
+    again = nve.download(raw, start=START, end=END, min_years=15, client=client)
     assert again.empty and client.calls == before
 
 

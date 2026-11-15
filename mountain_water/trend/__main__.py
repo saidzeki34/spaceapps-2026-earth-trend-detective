@@ -143,7 +143,7 @@ def _download_nve(args) -> None:
         s.nve_raw_dir, start=args.start or nve.START, end=args.end,
         min_elevation=s.filters.min_mean_elevation_m if args.min_elevation is None else args.min_elevation,
         max_area=s.filters.max_area_km2 if args.max_area is None else args.max_area,
-        min_years=s.filters.min_valid_years, chunk_years=args.chunk_years or 20, workers=args.workers or 3,
+        min_years=s.filters.min_valid_years, workers=args.workers or 6,
     )
     _report_failures(log, s.nve_raw_dir)
 
@@ -180,8 +180,8 @@ def main(argv: list[str] | None = None) -> None:
     d.add_argument("--end", default=None, help="NVE/GLDAS: last day (default: latest complete period)")
     d.add_argument("--min-elevation", type=float, default=None, help="NVE: minimum median elevation for download")
     d.add_argument("--max-area", type=float, default=None, help="NVE: maximum catchment area for download")
-    d.add_argument("--chunk-years", type=int, default=None, help="NVE/GLDAS: years per request (default 20 / 5)")
-    d.add_argument("--workers", type=int, default=None, help="NVE/GLDAS: parallel requests (default 3 / 4)")
+    d.add_argument("--chunk-years", type=int, default=None, help="GLDAS: years per request (default 5)")
+    d.add_argument("--workers", type=int, default=None, help="NVE/GLDAS: parallel requests (default 6 / 4)")
     d.add_argument("--probe", action="store_true", help="GLDAS: one small test request, prints the raw response")
 
     i = sub.add_parser("inspect", help="Show real file layout (CAMELS-CH) or API field names (NVE)")

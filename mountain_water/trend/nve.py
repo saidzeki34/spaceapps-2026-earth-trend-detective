@@ -6,7 +6,10 @@ Sources (NLOD licence; credit NVE / MET Norway):
     * NVE map service HydrologiskeData3, layer "Totalnedbørfelt til målestasjon" (catchment
       upstream of each gauging station), EPSG:25833.
     * NVE GridTimeSeries (GTS, https://gts.nve.no/api, no key): seNorge 1 km daily precipitation
-      (rr), mean temperature (tm) and snow water equivalent, averaged over each catchment polygon.
+      (rr), mean temperature (tm) and snow water equivalent (swe). The polygon-aggregation endpoint
+      returned HTTP 500 for every request (incl. NVE's documented example, 2026-11-15), so each
+      catchment is sampled on a regular grid of points (``sample_points``, ~20 per catchment) and the
+      point series (one fast request per point and theme for the whole period) are averaged.
 
 Everything downloaded is cached under ``data/raw/nve/`` so reruns only fetch what is missing.
 Field names that could not be verified offline are tried from candidate lists; run
@@ -119,7 +122,7 @@ class NveClient:
 
     def hydapi(self, path: str, **params) -> dict:
         if not self.api_key:
-            raise RuntimeError("HydAPI requests need NVE_API_KEY")
+            get_api_key()  # raises with instructions
         return self._request("GET", f"{HYDAPI}/{path}", params=params, headers={"X-API-Key": self.api_key})
 
     def stations(self) -> list[dict]:
@@ -138,12 +141,9 @@ class NveClient:
         return self._request("GET", CATCHMENT_LAYER, params=dict(where="1=1", outFields="*", resultRecordCount=1,
                                                                  f="json", returnGeometry="false"))
 
-    def senorge(self, theme: str, rings: list, start: str, end: str) -> dict:
-        body = {
-            "Theme": theme, "StartDate": start, "EndDate": end, "Format": "json",
-            "Rings": json.dumps({"rings": rings, "spatialReference": {"wkid": 25833}}),
-        }
-        return self._request("POST", f"{GTS}/AggregationTimeSeries/ByGeoJson", json=body)
+    def senorge_point(self, theme: str, x: int, y: int, start: str, end: str) -> dict:
+        """seNorge series at one point (EPSG:25833 metres) for the whole period."""
+        return self._request("GET", f"{GTS}/GridTimeSeries/{x}/{y}/{start}/{end}/{theme}.json")
 
     def themes(self):
         return self._request("GET", f"{GTS}/GridTimeSeries/Themes/json")
@@ -280,11 +280,25 @@ def catchment_polygons(geojson: dict, gauge_ids: list[str] | None = None) -> tup
     return {gid: best[key] for gid, key in wanted.items() if key in best}, CRS
 
 
-def rings(geom, tolerance: float = 50.0) -> list:
-    """ArcGIS-style rings (exterior rings, metres) of a simplified polygon for the GTS API."""
-    g = geom.simplify(tolerance, preserve_topology=True)
-    parts = getattr(g, "geoms", [g])
-    return [[[round(x), round(y)] for x, y in p.exterior.coords] for p in parts if p.geom_type == "Polygon"]
+def sample_points(geom, target: int = 20, cell: int = 1000) -> list[tuple[int, int]]:
+    """Regular grid of points inside a catchment (EPSG:25833) at 1 km seNorge cell centres.
+
+    Spacing is a multiple of the 1 km cell, chosen so a catchment gets about ``target`` points
+    (every cell for small catchments, e.g. every 5th km for ~500 km²). Equal spacing makes the plain
+    mean of the point values an area-weighted catchment mean.
+    """
+    import math
+
+    from shapely.geometry import Point
+    from shapely.prepared import prep
+
+    spacing = math.ceil(max(cell, math.sqrt(geom.area / target)) / cell) * cell
+    x0, y0, x1, y1 = geom.bounds
+    xs = np.arange(math.floor(x0 / cell) * cell + cell / 2, x1, spacing)
+    ys = np.arange(math.floor(y0 / cell) * cell + cell / 2, y1, spacing)
+    inside = prep(geom)
+    pts = [(int(x), int(y)) for x in xs for y in ys if inside.contains(Point(x, y))]
+    return pts or [tuple(int(v) for v in geom.representative_point().coords[0])]
 
 
 # --------------------------------------------------------------------------- parsing
@@ -308,7 +322,11 @@ def parse_discharge(payload: dict) -> pd.DataFrame:
 
 
 def parse_senorge(payload: dict, start: str) -> pd.Series:
-    """GTS aggregated response -> daily series starting at ``start``; NoDataValue becomes NaN."""
+    """GTS response -> daily series; NoDataValue (65535) becomes NaN.
+
+    Dates come from the response's ``StartDate`` ("01.01.1961 06:00:00": seNorge days run 06-06 UTC
+    and are labelled with their start date), falling back to the requested ``start``.
+    """
     if "Data" in payload:
         values = np.asarray(payload["Data"], dtype=float)
     elif payload.get("CellTimeSeries"):  # per-cell response: average over cells
@@ -320,21 +338,13 @@ def parse_senorge(payload: dict, start: str) -> pd.Series:
     nodata = payload.get("NoDataValue")
     if nodata is not None:
         values[values == float(nodata)] = np.nan
-    index = pd.date_range(pd.Timestamp(start), periods=len(values), freq="D", name="date")
+    first = pd.to_datetime(payload.get("StartDate"), format="%d.%m.%Y %H:%M:%S", errors="coerce")
+    first = pd.Timestamp(start) if pd.isna(first) else first.normalize()
+    index = pd.date_range(first, periods=len(values), freq="D", name="date")
     return pd.Series(values, index=index)
 
 
 # --------------------------------------------------------------------------- download + load
-
-
-def _chunks(start: str, end: str, years: int) -> list[tuple[str, str]]:
-    s, e = pd.Timestamp(start), pd.Timestamp(end)
-    out = []
-    while s <= e:
-        stop = min(s + pd.DateOffset(years=years) - pd.Timedelta(days=1), e)
-        out.append((s.strftime("%Y-%m-%d"), stop.strftime("%Y-%m-%d")))
-        s = stop + pd.Timedelta(days=1)
-    return out
 
 
 def load_stations(raw_dir: Path) -> pd.DataFrame:
@@ -358,15 +368,16 @@ def download(
     min_elevation: float | None = 800.0,
     max_area: float | None = 500.0,
     min_years: int = 30,
-    chunk_years: int = 20,
-    workers: int = 3,
+    workers: int = 6,
     client: NveClient | None = None,
     themes: dict = THEMES,
+    points_per_catchment: int = 20,
 ) -> pd.DataFrame:
-    """Station list, catchment outlines, then discharge and seNorge series for candidate stations."""
+    """Station list, catchment outlines, then discharge and seNorge point series for candidate stations."""
     end = end or default_end()
     raw_dir.mkdir(parents=True, exist_ok=True)
-    client = client or NveClient(get_api_key())
+    # The key is only needed for HydAPI calls (station list / discharge not yet cached).
+    client = client or NveClient(os.environ.get("NVE_API_KEY", "").strip() or None)
 
     st_path = raw_dir / "stations.json"
     if not st_path.exists():
@@ -390,19 +401,25 @@ def download(
     polygons, _ = load_catchments(raw_dir, list(cands["gauge_id"]))
     log.info("Catchment outlines found for %d of %d candidates", len(polygons), len(cands))
 
+    points = sorted({pt for g in polygons.values() for pt in sample_points(g, points_per_catchment)})
+    log.info("%d seNorge sample points for %d catchments", len(points), len(polygons))
     tasks = [("discharge", gid, None, start, end) for gid in cands["gauge_id"]]
-    tasks += [("senorge", gid, theme, s, e) for gid in polygons for theme in themes
-              for s, e in _chunks(start, end, chunk_years)]
+    tasks += [("senorge", f"{x}_{y}", theme, start, end) for x, y in points for theme in themes]
 
     def path_for(kind, gid, theme, s, e):
         if kind == "discharge":
             return raw_dir / "discharge" / f"{gid}.json"
-        return raw_dir / "senorge" / gid / f"{theme}_{s}_{e}.json"
+        return _point_path(raw_dir, theme, gid, s, e)
 
     def run(task):
         kind, gid, theme, s, e = task
-        payload = client.discharge(gid, s, e) if kind == "discharge" else client.senorge(theme, rings(polygons[gid]), s, e)
-        n = len(parse_discharge(payload)) if kind == "discharge" else len(parse_senorge(payload, s))
+        if kind == "discharge":
+            payload = client.discharge(gid, s, e)
+            n = len(parse_discharge(payload))
+        else:
+            x, y = gid.split("_")
+            payload = client.senorge_point(theme, int(x), int(y), s, e)
+            n = len(parse_senorge(payload, s))
         path = path_for(*task)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload))
@@ -424,28 +441,46 @@ def download(
                 n, err = 0, str(exc)[:200]
                 log.warning("Failed %s %s %s %s..%s: %s", kind, gid, theme or "", s, e, err)
             results.append(dict(kind=kind, gauge_id=gid, theme=theme or "", start=s, end=e, values=n, error=err))
-            if i % 25 == 0 or i == len(todo):
+            if i % 100 == 0 or i == len(todo):
                 log.info("%d/%d requests done", i, len(todo))
     return pd.DataFrame(results, columns=["kind", "gauge_id", "theme", "start", "end", "values", "error"])
 
 
-def load_daily(raw_dir: Path, attrs: pd.DataFrame, themes: dict = THEMES) -> tuple[pd.DataFrame, dict]:
+def _point_path(raw_dir: Path, theme: str, point: str, start: str, end: str) -> Path:
+    return raw_dir / "senorge_points" / theme / f"{point}_{start}_{end}.json"
+
+
+def load_daily(raw_dir: Path, attrs: pd.DataFrame, themes: dict = THEMES,
+               points_per_catchment: int = 20) -> tuple[pd.DataFrame, dict]:
     """Daily table in the CAMELS-CH layout: gauge_id, date, discharge_vol, discharge_spec, quality,
-    precipitation, temperature_mean, swe (only stations with downloaded discharge)."""
+    precipitation, temperature_mean, swe (only stations with downloaded discharge).
+
+    seNorge columns are the mean over the catchment's sample points that were downloaded.
+    """
     area = attrs.set_index("gauge_id")["area"]
+    discharge_files = sorted((raw_dir / "discharge").glob("*.json"))
+    polygons, _ = load_catchments(raw_dir, [p.stem for p in discharge_files])
+    point_cache: dict[Path, pd.Series] = {}
     frames = []
-    for path in sorted((raw_dir / "discharge").glob("*.json")):
+    for path in discharge_files:
         gid = path.stem
         q = parse_discharge(json.loads(path.read_text()))
         if q.empty:
             continue
         q = q.set_index("date")
+        pts = sample_points(polygons[gid], points_per_catchment) if gid in polygons else []
         for theme, (col, _) in themes.items():
-            parts = [parse_senorge(json.loads(p.read_text()), p.stem.split("_")[1])
-                     for p in sorted((raw_dir / "senorge" / gid).glob(f"{theme}_*.json"))]
-            if parts:
-                s = pd.concat(parts)
-                q[col] = s[~s.index.duplicated()].reindex(q.index)
+            series = []
+            for x, y in pts:
+                # Any downloaded period for this point (the latest end date wins).
+                found = sorted((raw_dir / "senorge_points" / theme).glob(f"{x}_{y}_*.json"))
+                if found:
+                    p = found[-1]
+                    if p not in point_cache:
+                        point_cache[p] = parse_senorge(json.loads(p.read_text()), p.stem.split("_")[2])
+                    series.append(point_cache[p])
+            if series:
+                q[col] = pd.concat(series, axis=1).mean(axis=1).reindex(q.index)
         q = q.reset_index()
         q.insert(0, "gauge_id", gid)
         q["discharge_spec"] = q["discharge_vol"] * 86.4 / area.get(gid, np.nan)

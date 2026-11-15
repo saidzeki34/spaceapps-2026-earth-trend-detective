@@ -58,7 +58,7 @@ python -m mountain_water.trend report --source gldas --region no --gauge <id>
 | Daily discharge | NVE HydAPI, parameter 1001, resolution 1440 | m³/s, dated in Norwegian local time. The quality code is kept. Specific discharge = Q × 86.4 / area |
 | Station metadata | HydAPI `/Stations` | `drainageBasinArea`, `heightHypso50` (median elevation), `percentGlacier`, `catchmentRegTypeName` plus the reservoir fields, and the daily-discharge period from `seriesList` (field names verified 2026-11-15) |
 | Catchment outlines | NVE map service `HydrologiskeData3`, layer 38 "Totalnedbørfelt til målestasjon" (EPSG:25833) | Matched to stations on (watercourse area, station number) from `stasjonnr` or `compoundkey12`, whichever matches more stations. Version suffix and zero padding are ignored (`2.11`, `2.11.0` and `002.00011.000` are the same station) |
-| Precipitation, temperature, SWE | seNorge 1 km grids via NVE GridTimeSeries (`AggregationTimeSeries/ByGeoJson`), themes `rr`, `tm`, `swe` | Averaged over each catchment polygon (simplified to 50 m), in 20-year requests, no key needed |
+| Precipitation, temperature, SWE | seNorge 1 km grids via NVE GridTimeSeries point series (`GridTimeSeries/{x}/{y}/{start}/{end}/{theme}.json`), themes `rr`, `tm`, `swe` | Each catchment is sampled on a regular grid of 1 km cell centres (about 20 points; every cell in small catchments) and the points are averaged. One request per point and theme covers the whole period (about 0.6 s each). No key needed. The polygon endpoint (`AggregationTimeSeries/ByGeoJson`) returned HTTP 500 for every request on 2026-11-15, including NVE's own example |
 
 **Filter** (`TrendSettings.nve()`): median catchment elevation ≥ 800 m, area ≤ 500 km², unregulated, ≥ 30 valid years. Regulation follows NVE's category `catchmentRegTypeName`: only categories starting with "uregulert" are kept. Anything else containing "regulert" is excluded, including "regulert m/magasinregulering", "… og overføringer" and "regulert m/magasin og uregulert restfelt". Only stations without a category fall back to the numeric fields (any reservoir count, area or volume > 0 excludes). The category takes precedence because a regulated station can have every numeric regulation field at 0 (e.g. 1.200.0). The download step applies the same metadata filter first, so only candidate stations are fetched.
 
@@ -70,7 +70,7 @@ python -m mountain_water.trend report --source gldas --region no --gauge <id>
 - Outline layer: `stasjonnr` is written like `76.5.0`.
 - seNorge: `rr`, `tm` (°C) and `swe` (mm) are daily from 1957.
 
-**Not yet seen:** the layout of the GTS aggregation response. A request whose response doesn't parse is logged as failed and isn't cached. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
+**Live run on 2026-11-15:** 96 candidate stations; discharge for all 96 downloaded in under a minute, and all 96 outlines matched. seNorge point series checked for 2.32.0 (1960-10-01 to 2026-09-30). The full seNorge download is about 1,125 points × 3 themes. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
 
 ## GLDAS-2.1 Noah (NASA)
 
