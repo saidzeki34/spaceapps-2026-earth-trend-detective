@@ -1,6 +1,6 @@
 # trend: CAMELS-CH water availability trends
 
-This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. The same analysis runs on **NASA GLDAS-2.1** model output for the same catchments (see [GLDAS](#gldas-21-noah-nasa) below), and the two sources can be compared. Switzerland only for now. No forecasts yet.
+This folder downloads CAMELS-CH, parses the **observed daily series**, selects mountain headwater catchments, and computes how much water flows and when. It then tests for trends, compares 10-year windows, relates flow to its possible drivers and builds Plotly figures. The same analysis runs on **Norwegian NVE** observations (see [Norway](#norway-nve--senorge)) and on **NASA GLDAS-2.1** model output for either country's catchments (see [GLDAS](#gldas-21-noah-nasa)), so observations and the NASA model can be compared. No forecasts yet.
 
 ## Run
 
@@ -39,13 +39,40 @@ plots.regime_by_window(r, r.gauges[0])     # plotly Figure
 
 The 10-year windows start at the first valid hydrological year, 1982 (Oct 1981–Sep 1982), because the record starts in January 1981. That gives 1982–1991, 1992–2001, 2002–2011 and 2012–2020. A final window shorter than 8 years is dropped. Use `--hydro-year-start 1` to get calendar-year decades (1981–1990, ...).
 
+## Norway (NVE + seNorge)
+
+```text
+export NVE_API_KEY=<key>                               # free: https://hydapi.nve.no/Users
+python -m mountain_water.trend inspect --source nve    # real field names of the three services (check first)
+python -m mountain_water.trend -v download --source nve
+python -m mountain_water.trend build --source nve      # -> data/processed/trend_no
+python -m mountain_water.trend report --source nve --gauge <station id, e.g. 2.11.0>
+# NASA comparison for the same Norwegian catchments (needs EARTHDATA_TOKEN):
+python -m mountain_water.trend -v download --source gldas --region no
+python -m mountain_water.trend build --source gldas --region no      # -> data/processed/trend_no_gldas
+python -m mountain_water.trend report --source gldas --region no --gauge <id>
+```
+
+| Data | Source | Notes |
+| --- | --- | --- |
+| Daily discharge | NVE HydAPI, parameter 1001, resolution 1440 | m³/s, dated in Norwegian local time. The quality code is kept. Specific discharge = Q × 86.4 / area |
+| Station metadata | HydAPI `/Stations` | `drainageBasinArea`, `heightHypso50` (median elevation), `percentGlacier`, regulation fields, and the daily-discharge period from `seriesList` |
+| Catchment outlines | NVE map service `HydrologiskeData3`, layer 38 "Totalnedbørfelt til målestasjon" (EPSG:25833) | Matched to stations by `STASJON_NR` (or `COMPOUND_K`); `2.11` also matches HydAPI's `2.11.0` |
+| Precipitation, temperature, SWE | seNorge 1 km grids via NVE GridTimeSeries (`AggregationTimeSeries/ByGeoJson`), themes `rr`, `tm`, `swe` | Averaged over each catchment polygon (simplified to 50 m), in 20-year requests, no key needed |
+
+**Filter** (`TrendSettings.nve()`): median catchment elevation ≥ 800 m, area ≤ 500 km², unregulated, ≥ 30 valid years. A station counts as regulated if any regulation or reservoir field in its metadata is > 0; missing fields count as "none recorded". The download step applies the same metadata filter first, so only candidate stations are fetched.
+
+**Period:** October 1960 to the latest complete hydrological year. Windows: 1961–1970, …, 2011–2020, plus 2021–latest (kept because it has ≥ 5 years). The overlap with GLDAS starts in 2001.
+
+**Not yet checked against the live services** (no network access in development): the HydAPI station field names, the outline layer's id field, the seNorge theme codes (especially `swe`) and the GTS response layout. `inspect --source nve` prints all four. Candidate names live at the top of `nve.py`. Tests run the whole Norway chain, including GLDAS for Norway, against fake services (`tests/trend/test_nve.py`).
+
 ## GLDAS-2.1 Noah (NASA)
 
 GLDAS is NASA's Global Land Data Assimilation System. This pipeline uses **GLDAS_NOAH025_3H 2.1**: the Noah land-surface model on a 0.25° grid, 3-hourly, from 2000 to about 3 months ago. GLDAS is a model, not a measurement. It has no gauges, and its runoff isn't routed down rivers.
 
 ```text
 export EARTHDATA_TOKEN=<token>     # free Earthdata account: urs.earthdata.nasa.gov -> Generate Token (valid 60 days)
-python -m mountain_water.trend build                             # CAMELS-CH first: provides the catchment selection
+python -m mountain_water.trend build                             # CAMELS-CH first (or build --source nve for Norway)
 python -m mountain_water.trend download --source gldas --probe   # one tiny request: checks the token and response format
 python -m mountain_water.trend download --source gldas           # ~2,200 cached requests into data/raw/gldas; rerun to resume
 python -m mountain_water.trend build --source gldas              # -> data/processed/trend_gldas

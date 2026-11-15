@@ -19,3 +19,6 @@
 | 2026-11-15 | GLDAS locations: the CAMELS-CH mountain selection, area-weighted over catchment outlines; variables: runoff (surface + baseflow), snowmelt, precipitation, snowfall, temperature, evapotranspiration, SWE (no soil moisture) | User decision |
 | 2026-11-15 | GLDAS windows: 10-year steps, final window kept if >= 5 years; >= 20 valid years required | User decision; record starts 2000 |
 | 2026-11-15 | Access via Giovanni Time Series API, not Hydrology Data Rods | GES DISC announced Data Rods discontinuation (no earlier than 2025-10-31) |
+| 2026-11-15 | Norway backend on feature/backend-nve (from feature/backend-gldas): NVE HydAPI daily discharge, NVE catchment outlines, seNorge precipitation/temperature/SWE via NVE GridTimeSeries | User request; seNorge chosen as local drivers |
+| 2026-11-15 | Norway filter: median catchment elevation >= 800 m, area <= 500 km², unregulated (any regulation/reservoir metadata > 0 excludes), >= 30 valid years; period 1961–latest, 10-year windows (final >= 5 years kept) | User decision |
+| 2026-11-15 | GLDAS-2.1 comparison also for the Norwegian selection (`--region no`), same variables and method as Switzerland | User request |
