@@ -1,580 +1,390 @@
-// RivaScope: what is on screen, and what happens when something is picked.
-// The selection lives in `state`; the numbers come from the local server.
+// Presentation only. Scientific figures and records come from the trend backend.
+import { createMap } from './map.js';
 
-import { drawChart, drawYearBars, esc, fmt, legendHTML, MONTHS } from "./chart.js";
-import { createMap } from "./map.js";
-import { drawPlane } from "./plane.js";
+const $ = (selector) => document.querySelector(selector);
+const PAGE_SIZE = 40;
+const SCOPE_LABELS = { catchment: 'Catchment history', region: 'Regional comparison', sources: 'Observed / GLDAS', stations: 'Station network' };
+const STORE = 'rivascope-backend-selection-v1';
+const state = { dataset: 'ch', view: 'timeseries', gauge: '', options: {}, demo: false, expanded: false };
+let catalog = null, requestNumber = 0, controller = null, tableData = null, page = 0;
+let courseRequest = 0, plotted = false, resizeTimer = null;
+const courseCache = new Map();
 
-const $ = (selector, root = document) => root.querySelector(selector);
-const STORE_KEY = "rivascope-selection";
-const SPLASH_MIN_MS = 2200;
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function human(value) { return String(value ?? '').replaceAll('_', ' '); }
+function numeric(value) {
+  return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-GB', { maximumSignificantDigits: 6 });
+}
+function dataset() { return catalog?.datasets?.find((d) => d.id === state.dataset); }
+function views() { return dataset()?.views || []; }
+function selectedView() { return views().find((v) => v.id === state.view); }
+function selectedGauge() { return (dataset()?.gauges || []).find((g) => String(g.id) === state.gauge); }
+function labelGauge(gauge) { return gauge.label || [gauge.river || gauge.name, gauge.place, gauge.id].filter(Boolean).join(' / '); }
 
-const state = {
-  occupation: null, country: null, river: null, year: null, method: "monthly",
-  variables: [], sections: [], usual: false, expanded: false, full: false,
-};
-let boot = null;        // the menus; the rivers of each country are added once they have been read
-let geodata = null;     // country outlines and large river lines for the map
-let riversReady = null; // resolves when the list of rivers has arrived
-let linkedRiver = null; // a river named in the address, opened once the rivers are known
-let view = null;        // the latest answer for the open river
-let map = null;
-let asked = 0;          // counts requests, so a late answer never overwrites a newer one
-let timelineKey = null;
-let yearTimer = null;
-
-async function getJSON(url) {
-  const response = await fetch(url);
-  const data = await response.json().catch(() => ({ error: "The answer could not be read." }));
-  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
-  return data;
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => { throw new Error('The local server returned an unreadable response.'); });
+  if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (${response.status}).`);
+  return payload;
 }
 
-// ---------- Remembering the selection ----------
+function readSelection() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORE));
+    if (stored && typeof stored === 'object') {
+      for (const key of ['dataset', 'view', 'gauge']) if (typeof stored[key] === 'string') state[key] = stored[key];
+      if (stored.options && typeof stored.options === 'object') state.options = stored.options;
+    }
+  } catch { /* Storage is optional. */ }
+  const query = new URLSearchParams(location.hash.slice(1));
+  for (const key of ['dataset', 'view', 'gauge']) if (query.has(key)) state[key] = query.get(key);
+  for (const key of ['metric', 'year', 'variable', 'interval', 'driver', 'attribute', 'kind', 'normalized', 'log_scale', 'pair']) {
+    if (query.has(key)) state.options[key] = query.get(key);
+  }
+  state.demo = query.get('demo') === '1';
+}
 
 function remember() {
-  const { occupation, method, variables, sections, usual } = state;
-  localStorage.setItem(STORE_KEY, JSON.stringify({ occupation, method, variables, sections, usual }));
-  const parts = { o: state.occupation, c: state.country, r: state.river, y: state.year, m: state.method,
-    v: state.variables.join(","), s: state.sections.join(","), u: state.usual ? 1 : "", x: state.expanded ? 1 : "" };
-  const hash = Object.entries(parts).filter(([, value]) => value !== null && value !== "" && value !== undefined)
-    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&");
-  history.replaceState(null, "", "#" + hash);
+  const saved = { dataset: state.dataset, view: state.view, gauge: state.gauge, options: state.options };
+  try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch { /* Storage is optional. */ }
+  const params = parameters();
+  if (state.demo) params.set('demo', '1');
+  history.replaceState(null, '', `#${params}`);
 }
 
-function recall() {
-  state.variables = boot.variables.filter((v) => v.default).map((v) => v.id);
-  state.sections = boot.assessments.filter((a) => a.default).map((a) => a.id);
-  try { Object.assign(state, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { /* start fresh */ }
-  const link = new URLSearchParams(location.hash.slice(1));
-  const list = (key) => (link.get(key) || "").split(",").filter(Boolean);
-  if (link.has("o")) state.occupation = link.get("o");
-  if (link.has("m")) state.method = link.get("m");
-  if (link.has("v")) state.variables = list("v");
-  if (link.has("s")) state.sections = list("s");
-  state.usual = link.has("u") ? link.get("u") === "1" : state.usual;
-  state.expanded = link.get("x") === "1";
-  const country = boot.countries.find((c) => c.code === link.get("c"));
-  if (country) {
-    state.country = country.code;
-    if (link.get("r")) linkedRiver = { id: link.get("r"), year: Number(link.get("y")) || null };
+function parameters() {
+  const params = new URLSearchParams({ dataset: state.dataset, view: state.view });
+  if (state.gauge) params.set('gauge', state.gauge);
+  for (const option of selectedView()?.options || []) {
+    const value = state.options[option.name];
+    if (value !== undefined && value !== '') params.set(option.name, Array.isArray(value) ? value.join(',') : String(value));
   }
-  // Drop anything the menus no longer offer.
-  if (!boot.occupations.some((o) => o.id === state.occupation)) state.occupation = null;
-  if (!boot.methods.some((m) => m.id === state.method)) state.method = boot.methods[0].id;
-  state.variables = state.variables.filter((id) => boot.variables.some((v) => v.id === id));
-  state.sections = state.sections.filter((id) => boot.assessments.some((a) => a.id === id));
+  return params;
 }
 
-// ---------- Small lookups ----------
+function renderDatasetOptions() {
+  $('#dataset').innerHTML = catalog.datasets.map((d) => `<option value="${esc(d.id)}">${esc(d.label || d.id)}${d.status === 'ready' ? '' : d.status === 'error' ? ' · read error' : ' · not built'}</option>`).join('');
+  $('#dataset').value = state.dataset;
+  $('#dataset').disabled = false;
+}
 
-const countryOf = (code) => boot.countries.find((c) => c.code === code);
-const riverOf = (id) => boot.countries.flatMap((c) => c.rivers).find((r) => r.id === id);
-const occupationOf = (id) => boot.occupations.find((o) => o.id === id);
-const methodOf = (id) => boot.methods.find((m) => m.id === id);
-const inOrder = (ids, all) => all.filter((item) => ids.includes(item.id)).map((item) => item.id);
+function renderViews() {
+  const list = views();
+  if (!list.some((v) => v.id === state.view)) state.view = list[0]?.id || '';
+  const groups = [...new Set(list.map((v) => v.scope))];
+  $('#view').innerHTML = groups.length ? groups.map((scope) => `<optgroup label="${esc(SCOPE_LABELS[scope] || human(scope))}">${list.filter((v) => v.scope === scope).map((v) => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}</optgroup>`).join('') : '<option>No saved results</option>';
+  $('#view').value = state.view;
+  $('#view').disabled = !list.length;
+}
 
-// ---------- Start ----------
+function renderGaugeOptions() {
+  const all = dataset()?.gauges || [];
+  const filter = $('#gauge-filter').value.trim().toLowerCase();
+  const filtered = all.filter((g) => labelGauge(g).toLowerCase().includes(filter));
+  $('#gauge').innerHTML = filtered.length ? filtered.map((g) => `<option value="${esc(g.id)}">${esc(labelGauge(g))}</option>`).join('') : '<option value="">No matching gauges</option>';
+  $('#gauge').value = filtered.some((g) => String(g.id) === state.gauge) ? state.gauge : '';
+  $('#gauge').disabled = !filtered.length;
+  $('#gauge-filter').disabled = !all.length;
+}
 
-async function start() {
-  const began = performance.now();
-  try {
-    [boot, geodata] = await Promise.all([getJSON("/api/bootstrap"), getJSON("data/geodata.json")]);
-  } catch (error) {
-    $("#splash-status").textContent = `RivaScope could not start. ${error.message}`;
+function renderOptions() {
+  const spec = selectedView();
+  const options = spec?.options || [];
+  const html = options.map((option) => {
+    const items = option.values || [];
+    const ids = items.map((v) => String(v.id));
+    if (option.name === 'variable') {
+      let chosen = String(state.options.variable || '').split(',').filter((id) => ids.includes(id)).slice(0, 4);
+      if (!chosen.length && ids.length) chosen = [ids.includes('discharge_vol') ? 'discharge_vol' : ids[0]];
+      state.options.variable = chosen.join(',');
+      return `<div class="field"><fieldset><legend>Time-series variables · up to 4</legend><div class="check-list">${items.map((item) => `<label><input type="checkbox" data-variable="${esc(item.id)}" ${chosen.includes(String(item.id)) ? 'checked' : ''}><span>${esc(item.label)}</span></label>`).join('')}</div></fieldset></div>`;
+    }
+    let value = String(state.options[option.name] ?? '');
+    if (!ids.includes(value)) value = String(option.default ?? (option.name === 'year' ? ids.at(-1) : ids[0]) ?? '');
+    state.options[option.name] = value;
+    return `<div class="field"><label for="option-${esc(option.name)}">${esc(option.label || human(option.name))}</label><select id="option-${esc(option.name)}" data-option="${esc(option.name)}" ${ids.length ? '' : 'disabled'}>${items.map((item) => `<option value="${esc(item.id)}" ${String(item.id) === value ? 'selected' : ''}>${esc(item.label)}</option>`).join('')}</select></div>`;
+  });
+  $('#view-options').innerHTML = html.join('');
+  const needsGauge = spec?.scope === 'catchment' || spec?.id === 'source_regime';
+  $('#gauge-controls').hidden = !needsGauge;
+  renderGaugeFacts();
+}
+
+function renderGaugeFacts() {
+  const gauge = selectedGauge();
+  if (!gauge || $('#gauge-controls').hidden) { $('#gauge-facts').innerHTML = ''; return; }
+  const facts = [['Station ID', gauge.id]];
+  if (gauge.area_km2 != null) facts.push(['Catchment area', `${numeric(gauge.area_km2)} km²`]);
+  if (gauge.elevation_m != null) facts.push([`${human(gauge.elevation_statistic || '')} elevation`.trim(), `${numeric(gauge.elevation_m)} m`]);
+  $('#gauge-facts').innerHTML = facts.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('');
+}
+
+function renderProvenance() {
+  const data = dataset();
+  const status = data?.status === 'ready';
+  $('#dataset-state').textContent = status ? 'Loaded' : data?.status === 'error' ? 'Error' : 'Not built';
+  $('#dataset-state').className = `tag ${status ? 'ready' : 'unavailable'}`;
+  const facts = [['Source', data?.label || state.dataset], ['Record', data?.kind === 'model' ? 'Modelled runoff · not a gauge measurement' : data?.kind === 'network' ? 'Station comparison' : 'Historical observations']];
+  if (data?.first_date) facts.push(['Saved daily coverage', `${data.first_date} to ${data.last_date}`]);
+  if (data?.years?.length) facts.push(['Analysis years', `${data.years[0]}–${data.years.at(-1)}`]);
+  if (data?.count != null) facts.push(['Gauge count', data.count]);
+  $('#provenance').innerHTML = `<dl>${facts.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('')}</dl>${data?.provenance && Object.keys(data.provenance).length ? `<h3 style="margin-top:14px">Provenance</h3><pre>${esc(JSON.stringify(data.provenance, null, 2))}</pre>` : '<p style="margin-top:12px">No additional provenance record is available.</p>'}${data?.settings ? `<details><summary>Backend settings</summary><pre>${esc(JSON.stringify(data.settings, null, 2))}</pre></details>` : ''}`;
+}
+
+function renderNotice(payload = null) {
+  const node = $('#data-notice');
+  if (state.demo) {
+    node.className = 'notice demo'; node.hidden = false;
+    node.innerHTML = '<strong>IMAGINARY DATA — VISUAL DEMONSTRATION ONLY</strong><p>This topographic surface uses invented values. It represents no river, measurement, forecast or operational risk assessment.</p>';
     return;
   }
-  // The menus are ready at once. The rivers take longer (the measurements have to be read),
-  // so they arrive in the background while the first screens are already usable.
-  boot.countries = Object.entries(geodata.countries).map(([code, c]) => ({ code, name: c.name, rivers: [], reading: true }));
-  boot.data = null;
-  riversReady = getJSON("/api/rivers").then(showRivers, (error) => {
-    boot.countries.forEach((c) => { c.reading = false; c.failed = error.message; });
-    if (!$("#app").hidden) renderSide();
-  });
-  const linked = location.hash.length > 1;
-  recall();
-  $("#choices").innerHTML = boot.occupations.map((o) => `
-    <li><button data-occupation="${o.id}">
-      <span class="choice-name">${esc(o.label)}</span>
-      <span class="choice-question">${esc(o.question)}</span>
-    </button></li>`).join("");
-  $("#occupation-select").innerHTML = boot.occupations.map((o) => `<option value="${o.id}">${esc(o.label)}</option>`).join("");
-  $("#about-body").innerHTML = aboutHTML();
-
-  setTimeout(() => {
-    const splash = $("#splash");
-    splash.classList.add("leaving");
-    setTimeout(() => splash.remove(), 500);
-    if (linked && state.occupation) openApp(); else openOccupationMenu();
-  }, linked ? 0 : Math.max(0, SPLASH_MIN_MS - (performance.now() - began)));
+  const data = payload || dataset();
+  const isModel = dataset()?.kind === 'model';
+  if (data?.status === 'ready' && !isModel) { node.hidden = true; return; }
+  node.className = `notice${data?.status === 'error' ? ' error' : ''}`; node.hidden = false;
+  node.innerHTML = data?.status === 'ready' ? '<strong>Model output</strong><p>GLDAS-2.1 is unrouted land-surface model runoff. It is not measured river discharge or a forecast.</p>' : `<strong>${data?.status === 'error' ? 'Saved result could not be read' : 'Saved result unavailable'}</strong><p>${esc(data?.message || 'No saved output is available for this selection.')}</p>${data?.build_command || data?.command ? `<pre>${esc(data.build_command || data.command)}</pre>` : ''}`;
 }
 
-// The rivers have arrived: fill the lists and the map, and open a river named in the address.
-function showRivers(answer) {
-  boot.countries = answer.countries;
-  boot.data = answer.data;
-  $("#about-body").innerHTML = aboutHTML();
-  const country = countryOf(state.country);
-  if (linkedRiver && country && country.rivers.some((r) => r.id === linkedRiver.id)) {
-    state.river = linkedRiver.id;
-    state.year = linkedRiver.year;
+function setMode(demo) {
+  state.demo = demo;
+  $('#observed-mode').classList.toggle('active', !demo);
+  $('#demo-mode').classList.toggle('active', demo);
+  $('#observed-mode').setAttribute('aria-pressed', String(!demo));
+  $('#demo-mode').setAttribute('aria-pressed', String(demo));
+  $('#table-panel').hidden = demo;
+}
+
+function showFigureStatus(title, detail = '', command = '') {
+  $('#chart').hidden = true;
+  $('#figure-status').hidden = false;
+  $('#figure-status').innerHTML = `<h3>${esc(title)}</h3>${detail ? `<p class="status-detail">${esc(detail)}</p>` : ''}${command ? `<pre>${esc(command)}</pre>` : ''}`;
+}
+
+function showTableStatus(message) {
+  tableData = null;
+  $('#download').disabled = true;
+  $('#table-wrap').hidden = true;
+  $('#table-pagination').hidden = true;
+  $('#table-status').hidden = false;
+  $('#table-status').textContent = message;
+  $('#row-count').textContent = '';
+}
+
+function contextText(context = {}) {
+  if (typeof context === 'string') return context;
+  return [context.source, context.period && `${context.period} · ${context.calendar || 'saved period'}`, context.unit].filter(Boolean).join(' / ');
+}
+
+async function drawFigure(figure) {
+  if (!window.Plotly) throw new Error('The local Plotly library could not be loaded. Reload the page or check the server.');
+  const layout = { ...(figure.layout || {}), autosize: true, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', font: { ...(figure.layout?.font || {}), family: 'Arial, Helvetica, sans-serif', size: 12, color: '#354e61' }, hoverlabel: { ...(figure.layout?.hoverlabel || {}), font: { ...(figure.layout?.hoverlabel?.font || {}), family: 'Arial, Helvetica, sans-serif' } } };
+  delete layout.width;
+  const chart = $('#chart');
+  // Tall network figures keep their backend row spacing and scroll within the panel.
+  const requestedHeight = Number(figure.layout?.height);
+  chart.style.height = !state.expanded && requestedHeight > 600 ? `${requestedHeight}px` : '';
+  if (!requestedHeight || state.expanded) delete layout.height;
+  $('#figure-status').hidden = true;
+  chart.hidden = false;
+  await Plotly.react(chart, figure.data || [], layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false });
+  plotted = true;
+}
+
+function renderTable() {
+  if (!tableData) return;
+  const rows = tableData.rows || [], columns = tableData.columns || [];
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  page = Math.max(0, Math.min(page, pages - 1));
+  $('#table-status').hidden = true;
+  $('#table-wrap').hidden = false;
+  $('#download').disabled = !rows.length;
+  const total = tableData.total_rows || tableData.total || rows.length;
+  $('#row-count').textContent = `${rows.length.toLocaleString()} records${total > rows.length ? ` shown of ${total.toLocaleString()}` : ''}`;
+  const caption = `${human(selectedView()?.table || state.view)} · ${dataset()?.label || state.dataset} · missing values shown as —`;
+  const html = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((row) => `<tr>${columns.map((column, index) => {
+    const value = Array.isArray(row) ? row[index] : row[column];
+    const missing = value == null || (typeof value === 'number' && !Number.isFinite(value));
+    const text = missing ? '—' : typeof value === 'number' ? numeric(value) : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return `<td class="${missing ? 'missing' : typeof value === 'number' ? 'numeric' : ''}" title="${esc(missing ? 'Missing' : typeof value === 'object' ? text : value)}">${esc(text)}</td>`;
+  }).join('')}</tr>`).join('');
+  $('#table-wrap').innerHTML = `<table><caption>${esc(caption)}</caption><thead><tr>${columns.map((column) => `<th scope="col">${esc(column)}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table>`;
+  $('#table-pagination').hidden = pages < 2;
+  $('#page-label').textContent = `Page ${page + 1} / ${pages}`;
+  $('#previous-page').disabled = page === 0;
+  $('#next-page').disabled = page === pages - 1;
+}
+
+async function refreshView() {
+  const number = ++requestNumber;
+  controller?.abort(); controller = new AbortController();
+  setMode(state.demo); remember(); renderNotice();
+  $('#figure-notes').innerHTML = '';
+  if (state.demo) { await drawDemo(); return; }
+  const data = dataset(), spec = selectedView();
+  $('#figure-title').textContent = spec?.label || data?.label || 'No saved results';
+  $('#figure-kicker').textContent = (SCOPE_LABELS[spec?.scope] || 'SAVED BACKEND RESULTS').toUpperCase();
+  $('#figure-context').textContent = data?.label || '';
+  if (data?.status !== 'ready' || !spec) {
+    showFigureStatus(data?.status === 'error' ? 'Unable to load saved results' : 'Results not built', data?.message || 'No saved backend results exist for this source.', data?.build_command);
+    showTableStatus('No records available.'); return;
   }
-  linkedRiver = null;
-  if (map) map.setRivers(Object.fromEntries(boot.countries.map((c) => [c.code, c.rivers])));
-  if (!$("#app").hidden) render();
+  showFigureStatus('Loading analysis', 'Reading saved backend output…');
+  showTableStatus('Loading records…');
+  $('#figure-panel').setAttribute('aria-busy', 'true');
+  const params = parameters();
+  const tableParams = new URLSearchParams(params);
+  if (spec.table) tableParams.set('table', spec.table);
+  const opts = { signal: controller.signal };
+  const jobs = [
+    api(`/api/figure?${params}`, opts).then(async (payload) => {
+      if (number !== requestNumber) return;
+      if (payload.status !== 'ready' || !payload.figure) {
+        renderNotice(payload);
+        showFigureStatus('Analysis unavailable', payload.message || 'No result is available for this selection.', payload.build_command);
+        return;
+      }
+      $('#figure-context').textContent = contextText(payload.context);
+      $('#figure-notes').innerHTML = (payload.notes || []).map((note) => `<p>${esc(note)}</p>`).join('');
+      await drawFigure(payload.figure);
+    }).catch((error) => {
+      if (error.name !== 'AbortError' && number === requestNumber) showFigureStatus('Unable to display analysis', error.message);
+    }).finally(() => { if (number === requestNumber) $('#figure-panel').setAttribute('aria-busy', 'false'); }),
+    api(`/api/table?${tableParams}`, opts).then((payload) => {
+      if (number !== requestNumber) return;
+      if (payload.status !== 'ready') { showTableStatus(payload.message || 'No matching records.'); return; }
+      tableData = payload; page = 0;
+      if (!payload.rows?.length) { showTableStatus('No records match this selection.'); return; }
+      renderTable();
+    }).catch((error) => { if (error.name !== 'AbortError' && number === requestNumber) showTableStatus(error.message); }),
+  ];
+  await Promise.allSettled(jobs);
 }
 
-function aboutHTML() {
-  const data = boot.data;
-  if (!data) return "<p>The river data is still being read. Please look again in a moment.</p>";
-  const measured = data.measured_rivers
-    ? `<p>Measured rivers come from <b>${esc(data.measured_source)}</b>: observed daily records of Swiss catchments,
-       analysed by this project's trend section. ${data.measured_rivers} mountain rivers are available.</p>`
-    : `<p><b>No measured data was found on this computer.</b> ${esc(data.message).replace(/`([^`]+)`/g, "<code>$1</code>")}</p>`;
-  return `${measured}
-    <p>Anything marked <span class="imaginary">imaginary</span> is a placeholder, made up so that every part of the
-    screen has something to show: rivers without measurements (all of Norway and the large Swiss rivers),
-    evaporation, the prediction, the physical model, the requirements and the risk index. They are meant to be
-    replaced as real sources arrive.</p>
-    <p>Map imagery and place names: Esri. Country outlines: Natural Earth. Courses of the large rivers:
-    © OpenStreetMap contributors. Catchments of the measured rivers: CAMELS-CH.</p>`;
-}
-
-function openOccupationMenu() {
-  $("#app").hidden = true;
-  $("#occupation").hidden = false;
-}
-
-function openApp() {
-  $("#occupation").hidden = true;
-  $("#app").hidden = false;
-  $("#occupation-select").value = state.occupation;
-  if (!map) {
-    map = createMap($("#map"), geodata, {
-      country: (code) => go({ country: code, river: null }),
-      river: (id) => go({ river: id }),
-      europe: () => go({ country: null, river: null }),
-    });
-    map.setRivers(Object.fromEntries(boot.countries.map((c) => [c.code, c.rivers])));
-    riversReady.then(() => getJSON("/api/outlines")).then((outlines) => map.setOutlines(outlines)).catch(() => {});
-  }
-  render();
-}
-
-// ---------- Moving around ----------
-
-function go(changes) {
-  const riverChanged = "river" in changes && changes.river !== state.river;
-  Object.assign(state, changes);
-  if (riverChanged) { state.year = null; view = null; state.full = false; }
-  if (!state.river) state.expanded = false;
-  render();
-}
-
-function render() {
-  const layout = $("#layout");
-  layout.classList.toggle("has-river", Boolean(state.river));
-  layout.classList.toggle("expanded", state.expanded);
-  renderCrumbs();
-  renderSide();
-  map.show({ country: state.country, river: state.river });
-  if (state.river) {
-    if (!view) $("#results").innerHTML = `<div class="results-scroll"><p class="message">Reading this river’s record…</p></div>`;
-    refresh();
-  } else {
-    timelineKey = null;
-  }
-  remember();
-}
-
-function renderCrumbs() {
-  const country = countryOf(state.country), river = riverOf(state.river);
-  const parts = [country ? `<button class="link" data-action="europe">Europe</button>` : `<span class="here">Europe</span>`];
-  if (country) {
-    parts.push(river ? `<button class="link" data-action="rivers">${esc(country.name)}</button>`
-      : `<span class="here">${esc(country.name)}</span>`);
-  }
-  if (river) parts.push(`<span class="here">${esc(river.name)}</span>`);
-  $("#crumbs").innerHTML = parts.join('<span class="sep">/</span>');
-}
-
-// ---------- Left box ----------
-
-function rowsHTML(rivers) {
-  return `<ul class="rows">${rivers.map((r) => `
-    <li><button class="row" data-river="${r.id}">
-      <span class="row-name">${esc(r.name)}</span>
-      ${r.place ? `<span class="row-sub">${esc(r.place)}</span>` : ""}
-    </button></li>`).join("")}</ul>`;
-}
-
-function renderSide() {
-  const side = $("#side");
-  const country = countryOf(state.country), river = riverOf(state.river);
-  if (!country) {
-    side.innerHTML = `
-      <h2>Countries</h2>
-      <p class="side-sub">Pick a country on the map or here.</p>
-      <ul class="rows">${boot.countries.map((c) => {
-        const measured = c.rivers.filter((r) => r.measured).length, other = c.rivers.length - measured;
-        const text = c.reading ? "reading its rivers…" : c.failed ? "its rivers could not be read"
-          : measured ? `${measured} measured rivers, ${other} more with imaginary data`
-          : `${other} rivers, imaginary data for now`;
-        return `<li><button class="row" data-country="${c.code}"><span class="row-name">${esc(c.name)}</span>
-          <span class="row-sub">${text}</span></button></li>`;
-      }).join("")}</ul>`;
-  } else if (!river) {
-    const measured = country.rivers.filter((r) => r.measured), other = country.rivers.filter((r) => !r.measured);
-    const lists = country.reading ? `<p class="side-sub">Reading the rivers…</p>`
-      : country.failed ? `<p class="side-sub">The rivers could not be read. ${esc(country.failed)}</p>`
-      : `<p class="side-sub">Pick a river on the map or here.</p>
-        ${measured.length ? `<p class="group-title">Measured mountain rivers <span class="quiet">${measured.length}</span></p>${rowsHTML(measured)}` : ""}
-        <p class="group-title">Large rivers <span class="imaginary">imaginary data</span></p>${rowsHTML(other)}`;
-    side.innerHTML = `
-      <button class="link back" data-action="europe">← Europe</button>
-      <h2>${esc(country.name)}</h2>
-      ${lists}`;
-  } else {
-    const facts = [river.area_km2 && `${Math.round(river.area_km2)} km²`,
-      river.elevation_m && `mean height ${Math.round(river.elevation_m).toLocaleString("en-US")} m`].filter(Boolean);
-    const about = river.measured
-      ? `Measured at ${esc(river.place)}${facts.length ? " · " + facts.join(" · ") : ""}`
-      : `<span class="imaginary">Imaginary data.</span> No measurements are connected for this river yet.`;
-    const check = (item, kind, checked, extra = "") => `
-      <label class="check" ${item.color ? `style="--c:${item.color}"` : ""} title="${esc(item.explain || "")}">
-        <input type="checkbox" data-${kind}="${item.id}" ${checked ? "checked" : ""}>
-        ${item.color ? '<i class="swatch"></i>' : ""}
-        <span>${esc(item.label)}${extra}</span>
-        ${item.unit ? `<span class="unit">${esc(item.unit)}</span>` : ""}
-      </label>`;
-    const variables = (group) => boot.variables.filter((v) => v.group === group).map((v) => check(v, "variable",
-      state.variables.includes(v.id),
-      river.measured && boot.imaginary_variables.includes(v.id) ? ' <span class="imaginary">imaginary</span>' : "")).join("");
-    side.innerHTML = `
-      <button class="link back" data-action="rivers">← Rivers of ${esc(country.name)}</button>
-      <h2>${esc(river.name)}</h2>
-      <p class="side-sub">${about}</p>
-      <fieldset><p class="group-title">Reference</p>${variables("reference")}</fieldset>
-      <hr class="rule">
-      <fieldset><p class="group-title">Water availability</p>${variables("water")}</fieldset>
-      <hr class="rule">
-      <fieldset><p class="group-title">Assessments</p>
-        ${boot.assessments.map((a) => check(a, "section", state.sections.includes(a.id))).join("")}</fieldset>
-      <hr class="rule">
-      <fieldset><p class="group-title">Calculation</p>
-        ${boot.methods.map((m) => `
-          <label class="check"><input type="radio" name="method" value="${m.id}" ${state.method === m.id ? "checked" : ""}>
-            <span>${esc(m.label)}<small>${esc(m.hint)}</small></span></label>`).join("")}</fieldset>`;
-  }
-}
-
-// ---------- Asking for the numbers ----------
-
-async function refresh() {
-  if (!state.river) return;
-  const ticket = ++asked;
-  const query = new URLSearchParams({
-    river: state.river, year: state.year ?? "", method: state.method, occupation: state.occupation,
-    variables: state.variables.join(","), sections: state.sections.join(","), usual: state.usual ? "1" : "",
-  });
-  $(".results-scroll")?.classList.add("loading");
+async function drawDemo() {
+  $('#figure-kicker').textContent = 'IMAGINARY DATA / DEMONSTRATION';
+  $('#figure-title').textContent = '3D volatility surface';
+  $('#figure-context').textContent = 'Synthetic coordinates and values · not linked to the selected gauge';
+  $('#figure-notes').innerHTML = '<p>Illustrative geometry only. Drag to rotate. There is no fitted model, observed river response or risk score behind this surface.</p>';
+  const x = Array.from({ length: 35 }, (_, i) => -20 + i * 40 / 34);
+  const y = Array.from({ length: 35 }, (_, i) => -30 + i * 60 / 34);
+  const z = y.map((b) => x.map((a) => 8 + 0.008 * a * a + 0.005 * b * b + 11 * Math.exp(-((a - 5) ** 2 / 120 + (b + 8) ** 2 / 180)) + 2.2 * Math.sin(a / 8) * Math.cos(b / 11)));
   try {
-    const answer = await getJSON(`/api/view?${query}`);
-    if (ticket !== asked) return;
-    view = answer;
-    state.year = answer.year;
-    renderTimeline();
-    renderResults();
-    remember();
-  } catch (error) {
-    if (ticket !== asked) return;
-    $("#results").innerHTML = `<div class="results-scroll"><p class="message">This river could not be read. ${esc(error.message)}</p></div>`;
-  }
+    await drawFigure({ data: [{ type: 'surface', x, y, z, colorscale: [[0, '#dbe8ef'], [.4, '#76a3bb'], [.7, '#306d93'], [1, '#17394f']], colorbar: { title: { text: 'Imaginary<br>variation (%)', font: { size: 11 } }, thickness: 12 }, contours: { z: { show: true, usecolormap: true, project: { z: true } } }, hovertemplate: 'Imaginary timing: %{x:.1f} d<br>Imaginary quantity: %{y:.1f}%<br>Imaginary variation: %{z:.1f}%<extra>DEMONSTRATION</extra>' }], layout: { margin: { l: 18, r: 80, t: 20, b: 20 }, scene: { xaxis: { title: { text: 'Timing shift (imaginary days)' } }, yaxis: { title: { text: 'Quantity change (imaginary %)' } }, zaxis: { title: { text: 'Variation (imaginary %)' } }, camera: { eye: { x: 1.6, y: -1.6, z: 1.1 } }, aspectratio: { x: 1.2, y: 1.2, z: .7 } } } });
+  } catch (error) { showFigureStatus('Demonstration unavailable', error.message); }
 }
 
-// ---------- Timeline under the map ----------
-
-function renderTimeline() {
-  const { first_year: first, last_year: last, prediction_year: prediction, id } = view.river;
-  const host = $("#timeline");
-  const key = `${id}|${first}|${prediction}`;
-  if (timelineKey !== key) {
-    timelineKey = key;
-    const span = prediction - first;
-    const at = (year) => `calc(8px + (100% - 16px) * ${(year - first) / span})`;
-    const solid = ((last - first) / span) * 100;
-    const decades = [];
-    for (let year = Math.ceil((first + 3) / 10) * 10; year <= last - 11; year += 10) decades.push(year);
-    host.innerHTML = `
-      <div class="timeline-year" id="timeline-year"></div>
-      <div class="timeline-track" style="--track: linear-gradient(to right, #555c58 0 ${solid}%, transparent ${solid}%),
-          repeating-linear-gradient(to right, #9a5b12 0 3px, transparent 3px 7px)">
-        <input type="range" id="year-range" min="${first}" max="${prediction}" step="1" aria-label="Year">
-        <span class="tick first" style="left:0">${first}</span>
-        ${decades.map((year) => `<span class="tick" style="left:${at(year)}">${year}</span>`).join("")}
-        <span class="tick last" style="left:${at(last)}">latest data ${last}</span>
-        <span class="tick prediction" style="left:100%">prediction ${prediction}</span>
-      </div>`;
-  }
-  syncTimeline();
-}
-
-function syncTimeline() {
-  const predicting = state.year === view.river.prediction_year;
-  const range = $("#year-range");
-  if (Number(range.value) !== state.year) range.value = state.year;
-  range.classList.toggle("predicting", predicting);
-  $("#timeline-year").innerHTML = `${state.year}${predicting ? "<small>prediction</small>" : ""}`;
-}
-
-// ---------- Right box ----------
-
-function riskHTML(risk) {
-  if (!risk) return "";
-  const s = risk.scores;
-  return `
-    <section class="block">
-      <h3>Risk assessment <small>for ${esc(risk.occupation.label.toLowerCase())}</small></h3>
-      <p class="question">${esc(risk.occupation.question)}</p>
-      <p class="requirement"><b>${esc(risk.requirement.name)}:</b> ${esc(risk.requirement.summary)}
-        <span class="imaginary">imaginary</span>
-        <span class="why">No documented requirement exists yet. This placeholder is ${esc(risk.requirement.text)}.</span></p>
-      <p class="sentence">${esc(risk.year.sentence)}</p>
-      <dl class="facts">${risk.year.facts.map((f) => `
-        <div class="fact"><dt>${esc(f.label)}</dt><dd>${esc(f.value)}<small>${esc(f.of)}</small></dd></div>`).join("")}</dl>
-
-      <h4>Days below the requirement, year by year</h4>
-      <div class="minibars" id="year-bars"></div>
-      <p class="quiet">${esc(risk.record.sentence)} Click a bar to open that year.</p>
-
-      <h4>What has changed over the record</h4>
-      <table class="plain">
-        <tr><th></th><th>Usual</th><th>Change</th><th>Evidence</th></tr>
-        ${risk.changes.map((c) => `<tr title="${esc(c.description)}">
-          <td>${esc(c.label)}</td><td>${esc(c.usual)}</td>
-          <td class="${c.significant ? "strong" : ""}">${esc(c.change)}</td>
-          <td class="${c.significant ? "" : "faint"}">${esc(c.evidence)}</td></tr>`).join("")}
-      </table>
-
-      <h4>Volatility plane</h4>
-      <div class="plane-wrap">
-        <div class="plane" id="plane"></div>
-        <div class="plane-text">
-          <p>${esc(risk.plane.text || "Not enough years to place this river.")}</p>
-          ${risk.plane.others.length ? `<p class="quiet">Grey dots are the other measured rivers. Drag the picture to turn it.</p>`
-            : `<p class="quiet">Drag the picture to turn it.</p>`}
-          <p class="quiet">Risk index ${s.index} of 10 &middot; quantity ${s.quantity}, timing ${s.timing},
-            variability ${s.variability} <span class="imaginary">imaginary</span><br>
-            No formula has been agreed for these scores yet.</p>
-        </div>
-      </div>
-      <p class="needs">A real assessment would still need ${esc(risk.needs.slice(0, -1).join(", "))} and
-        ${esc(risk.needs[risk.needs.length - 1])}.</p>
-    </section>`;
-}
-
-function statisticsHTML(statistics) {
-  if (!statistics) return "";
-  if (!statistics.rows.length) {
-    return `<section class="block"><h3>Statistics</h3><p class="message">Tick a variable to see its statistics.</p></section>`;
-  }
-  return `
-    <section class="block">
-      <h3>Statistics</h3>
-      <table class="plain" style="margin-top:10px">
-        <tr><th></th><th>${statistics.year_label ? esc(statistics.year_label) : "This year"}</th>
-          <th>Usual ${esc(statistics.period)}</th><th>Change</th><th>Evidence</th></tr>
-        ${statistics.rows.map((r) => `<tr>
-          <td><i class="dot" style="--c:${r.color}"></i>${esc(r.variable)}${r.imaginary ? ' <span class="imaginary">imaginary</span>' : ""}
-            <span class="sub">${esc(r.metric)}${r.unit ? ", " + esc(r.unit) : ""}</span></td>
-          <td>${esc(r.year_value)}</td><td>${esc(r.mean)}</td>
-          <td class="${r.significant ? "strong" : ""}">${esc(r.change)}</td>
-          <td class="${r.significant ? "" : "faint"}">${esc(r.evidence)}</td></tr>`).join("")}
-      </table>
-      <p class="quiet" style="margin-top:10px">${esc(statistics.note)}</p>
-    </section>`;
-}
-
-function physicalHTML(physical) {
-  if (!physical) return "";
-  return `
-    <section class="block">
-      <h3>Physical models</h3>
-      <div class="legend" style="margin-top:12px">${legendHTML(physical.chart.series)}</div>
-      <div class="chart" id="physical-chart"></div>
-      <p class="quiet" style="margin-top:6px">Agreement with the discharge: ${esc(physical.agreement)}
-        <span class="imaginary">imaginary</span>. ${esc(physical.note)}</p>
-    </section>`;
-}
-
-// For the prediction year: the predicted value of every ticked variable, month by month.
-function predictionTableHTML(series) {
-  return `
-    <h4>Predicted value for each month <span class="imaginary">imaginary</span></h4>
-    <div class="table-scroll"><table class="plain months">
-      <tr><th></th>${MONTHS.map((month) => `<th>${month}</th>`).join("")}</tr>
-      ${series.map((s) => `<tr>
-        <td><i class="dot" style="--c:${s.color}"></i>${esc(s.label)} <span class="unit">${esc(s.unit)}</span></td>
-        ${s.values.map((value) => `<td>${fmt(value)}</td>`).join("")}</tr>`).join("")}
-    </table></div>`;
-}
-
-function renderResults() {
-  const host = $("#results");
-  const river = view.river;
-  const scrolled = $(".results-scroll", host)?.scrollTop || 0;
-  const series = view.chart.series;
-  const requirement = view.risk ? { ...view.risk.requirement } : null;
-  const showsRequirement = requirement && series.some((s) => s.id === "discharge");
-  const anyImaginary = !river.measured || series.some((s) => s.imaginary) || view.risk || view.physical;
-  const label = view.predicted ? `${view.year} · prediction` : `${view.year}`;
-  const source = river.measured ? `measured, ${esc(river.source)}` : `<span class="imaginary">imaginary data</span>`;
-
-  host.innerHTML = `
-    <header class="results-head">
-      <div>
-        <h2>${esc(river.name)}${river.place ? ` <small>at ${esc(river.place)}</small>` : ""}</h2>
-        <p class="results-meta">${label} &middot; ${esc(methodOf(view.method).label.toLowerCase())} &middot; ${source}</p>
-      </div>
-      <div class="head-actions"><button class="link" data-action="expand">${state.expanded ? "Show the map" : "Expand"}</button></div>
-    </header>
-    <div class="results-scroll">
-      ${series.length ? `
-        <figure class="graph${state.full ? " full" : ""}" id="graph">
-          <div class="graph-title">${esc(river.name)} &middot; ${label}</div>
-          <div class="legend">${legendHTML(series, showsRequirement ? requirement : null)}</div>
-          <div class="chart" id="chart"></div>
-          <div class="graph-foot">
-            <label><input type="checkbox" data-toggle="usual" ${state.usual ? "checked" : ""}> Compare with a usual year</label>
-            <button class="link" data-action="full">${state.full ? "Close full screen" : "Full screen"}</button>
-          </div>
-        </figure>`
-        : `<p class="message">Tick a variable in the left box to draw it here.</p>`}
-      ${view.predicted && series.length ? predictionTableHTML(series) : ""}
-      ${anyImaginary ? `<p class="note-imaginary">Dotted lines and anything marked imaginary are placeholders, not measurements.</p>` : ""}
-      ${riskHTML(view.risk)}${statisticsHTML(view.statistics)}${physicalHTML(view.physical)}
-    </div>`;
-  $(".results-scroll", host).scrollTop = scrolled;
-  drawPictures();
-}
-
-// Everything drawn with SVG needs its box's width, so it is drawn after the HTML is in place
-// and again whenever the box changes size.
-function drawPictures() {
-  if (!view || !state.river) return;
-  const chart = $("#chart");
-  if (chart) {
-    const requirement = view.risk ? view.risk.requirement : null;
-    const height = state.full ? Math.max(260, chart.clientHeight) : state.expanded ? 440 : 330;
-    drawChart(chart, view.chart, { height, requirement });
-  }
-  const bars = $("#year-bars");
-  if (bars) drawYearBars(bars, view.risk.record.years, view.risk.record.days_below, view.predicted ? null : view.year, pickYear);
-  const plane = $("#plane");
-  if (plane) drawPlane(plane, view.risk.plane, view.river.name);
-  const physical = $("#physical-chart");
-  if (physical) drawChart(physical, view.physical.chart, { height: 220 });
-}
-
-function pickYear(year) {
-  state.year = year;
-  syncTimeline();
-  refresh();
-}
-
-// ---------- Listening ----------
-
-document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action], [data-country], [data-river], [data-occupation]");
-  if (!target) return;
-  if (target.dataset.occupation) {
-    state.occupation = target.dataset.occupation;
-    openApp();
-  } else if (target.dataset.country) {
-    go({ country: target.dataset.country, river: null });
-  } else if (target.dataset.river) {
-    go({ river: target.dataset.river });
-  } else if (target.dataset.action === "europe") {
-    go({ country: null, river: null });
-  } else if (target.dataset.action === "rivers") {
-    go({ river: null });
-  } else if (target.dataset.action === "about") {
-    $("#about").showModal();
-  } else if (target.dataset.action === "expand") {
-    state.expanded = !state.expanded;
-    $("#layout").classList.toggle("expanded", state.expanded);
-    renderResults();
-    remember();
-  } else if (target.dataset.action === "full") {
-    state.full = !state.full;
-    renderResults();
-  }
+const map = createMap($('#map'), (id) => {
+  if (!(dataset()?.gauges || []).some((g) => String(g.id) === id)) return;
+  state.gauge = id; $('#gauge-filter').value = '';
+  renderGaugeOptions(); renderGaugeFacts(); updateMap();
+  if (selectedView()?.scope !== 'catchment') { state.view = 'timeseries'; renderViews(); renderOptions(); }
+  setMode(false); refreshView();
 });
 
-document.addEventListener("change", (event) => {
+async function updateMap() {
+  const request = ++courseRequest, data = dataset();
+  const datasetId = state.dataset;
+  const region = data?.country?.toLowerCase() || (state.dataset === 'stations' ? 'ch' : state.dataset.split('_')[0]);
+  const gauges = data?.gauges || [];
+  const highlight = !$('#gauge-controls').hidden ? state.gauge : null;
+  map.setData(gauges, null, highlight, region);
+  $('#map-note').textContent = gauges.length ? 'Loading available river courses…' : 'No saved gauge positions are available for this source.';
+  try {
+    if (!courseCache.has(datasetId)) courseCache.set(datasetId, await api(`/api/courses?dataset=${encodeURIComponent(datasetId)}`));
+    if (request !== courseRequest) return;
+    const courses = courseCache.get(datasetId);
+    map.setData(gauges, courses, highlight, region);
+    const hasCourse = (courses.features || []).some((feature) => String(feature.properties?.id) === highlight);
+    $('#map-note').textContent = !gauges.length ? 'No saved gauge positions are available for this source.' : highlight ? (hasCourse ? 'Gauge point and mapped OpenStreetMap river segments. The stored course may be incomplete; display geometry only.' : `Gauge point only. ${courses.missing?.[highlight] || 'No verified course is stored for this gauge.'}`) : 'Gauge points and mapped river segments. Display geometry only; the stored river network may be incomplete.';
+  } catch {
+    if (request !== courseRequest) return;
+    $('#map-note').textContent = gauges.length ? 'Gauge points only. River-course geometry is unavailable.' : 'No saved gauge positions are available for this source.';
+  }
+}
+
+async function chooseDataset() {
+  const data = dataset();
+  if (!(data?.gauges || []).some((g) => String(g.id) === state.gauge)) state.gauge = String(data?.gauges?.[0]?.id || '');
+  $('#gauge-filter').value = '';
+  renderViews(); renderGaugeOptions(); renderOptions(); renderProvenance();
+  updateMap();
+  await refreshView();
+}
+
+async function loadCatalogue(refresh = false) {
+  $('#refresh').disabled = true;
+  $('#connection').textContent = refresh ? 'Reloading saved results…' : 'Loading catalogue…';
+  try {
+    catalog = await api(refresh ? '/api/refresh' : '/api/catalog', refresh ? { method: 'POST' } : {});
+    if (!Array.isArray(catalog.datasets) || !catalog.datasets.length) throw new Error('No dataset catalogue was returned.');
+    if (!catalog.datasets.some((d) => d.id === state.dataset)) state.dataset = catalog.datasets.find((d) => d.status === 'ready')?.id || catalog.datasets[0].id;
+    $('#startup-error').hidden = true;
+    const ready = catalog.datasets.filter((d) => d.status === 'ready').length;
+    $('#connection').textContent = `${ready} / ${catalog.datasets.length} saved datasets available`;
+    if (refresh) courseCache.clear();
+    renderDatasetOptions();
+    await chooseDataset();
+  } catch (error) {
+    $('#startup-error').textContent = `${error.message} Use “Reload saved results” to retry.`;
+    $('#startup-error').hidden = false;
+    $('#connection').textContent = 'Local server unavailable';
+    showFigureStatus('Unable to load the catalogue', error.message);
+  } finally { $('#refresh').disabled = false; }
+}
+
+$('#dataset').addEventListener('change', () => { state.dataset = $('#dataset').value; setMode(false); chooseDataset(); });
+$('#view').addEventListener('change', () => { state.view = $('#view').value; renderOptions(); updateMap(); setMode(false); refreshView(); });
+$('#gauge-filter').addEventListener('input', renderGaugeOptions);
+$('#gauge').addEventListener('change', () => { state.gauge = $('#gauge').value; renderGaugeFacts(); updateMap(); setMode(false); refreshView(); });
+$('#view-options').addEventListener('change', (event) => {
   const input = event.target;
-  if (input.id === "occupation-select") {
-    state.occupation = input.value;
-  } else if (input.dataset.variable) {
-    const ids = new Set(state.variables);
-    if (input.checked) ids.add(input.dataset.variable); else ids.delete(input.dataset.variable);
-    state.variables = inOrder([...ids], boot.variables);
-  } else if (input.dataset.section) {
-    const ids = new Set(state.sections);
-    if (input.checked) ids.add(input.dataset.section); else ids.delete(input.dataset.section);
-    state.sections = inOrder([...ids], boot.assessments);
-  } else if (input.name === "method") {
-    state.method = input.value;
-  } else if (input.dataset.toggle === "usual") {
-    state.usual = input.checked;
-  } else {
-    return;
+  if (input.dataset.option) state.options[input.dataset.option] = input.value;
+  else if (input.dataset.variable) {
+    const chosen = [...document.querySelectorAll('[data-variable]:checked')];
+    if (chosen.length > 4 || chosen.length === 0) { input.checked = !input.checked; return; }
+    state.options.variable = chosen.map((node) => node.dataset.variable).join(',');
+  } else return;
+  setMode(false); refreshView();
+});
+$('#refresh').addEventListener('click', () => loadCatalogue(true));
+$('#observed-mode').addEventListener('click', () => { setMode(false); refreshView(); });
+$('#demo-mode').addEventListener('click', () => { setMode(true); refreshView(); });
+$('#map-reset').addEventListener('click', () => map.fit());
+$('#previous-page').addEventListener('click', () => { page--; renderTable(); });
+$('#next-page').addEventListener('click', () => { page++; renderTable(); });
+
+function expandChart(expanded) {
+  state.expanded = expanded;
+  $('#figure-panel').classList.toggle('expanded', expanded);
+  document.body.classList.toggle('chart-expanded', expanded);
+  $('#expand').textContent = expanded ? 'Close expanded chart' : 'Expand chart';
+  $('#expand').setAttribute('aria-expanded', String(expanded));
+  if (plotted) {
+    Plotly.relayout($('#chart'), { height: expanded ? $('#figure-panel').clientHeight - $('.figure-heading').offsetHeight - $('#figure-notes').offsetHeight : null, autosize: true });
   }
-  remember();
-  refresh();
-});
-
-document.addEventListener("input", (event) => {
-  if (event.target.id !== "year-range") return;
-  state.year = Number(event.target.value);
-  syncTimeline();
-  clearTimeout(yearTimer);
-  yearTimer = setTimeout(refresh, 110);
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && state.full) {
-    state.full = false;
-    renderResults();
-  }
-});
-
-// Dragging the bar between the map and the results makes the results wider or narrower.
-{
-  const grip = $("#grip"), layout = $("#layout");
-  grip.addEventListener("pointerdown", (event) => {
-    grip.setPointerCapture(event.pointerId);
-    grip.classList.add("dragging");
-  });
-  grip.addEventListener("pointermove", (event) => {
-    if (!grip.classList.contains("dragging")) return;
-    const mapLeft = $(".mapwrap").getBoundingClientRect().left;
-    const most = layout.getBoundingClientRect().right - mapLeft - 420;
-    layout.style.setProperty("--map-w", `${Math.max(240, Math.min(most, event.clientX - mapLeft))}px`);
-  });
-  const stop = () => grip.classList.remove("dragging");
-  grip.addEventListener("pointerup", stop);
-  grip.addEventListener("pointercancel", stop);
 }
+$('#expand').addEventListener('click', () => expandChart(!state.expanded));
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.expanded) expandChart(false); });
+$('#download').addEventListener('click', () => {
+  if (!tableData) return;
+  const field = (value) => {
+    let text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+  const lines = [tableData.columns.map(field).join(','), ...tableData.rows.map((row) => tableData.columns.map((column, i) => field(Array.isArray(row) ? row[i] : row[column])).join(','))];
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a'); link.href = url;
+  link.download = `rivascope-${state.dataset}-${selectedView()?.table || state.view}.csv`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
-let drawTimer = null;
 new ResizeObserver(() => {
-  clearTimeout(drawTimer);
-  drawTimer = setTimeout(drawPictures, 60);
-}).observe($("#results"));
-
-// Tell the local server when the window closes, so it can stop too.
-window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye"));
-
-start();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (plotted && !$('#chart').hidden) Plotly.Plots.resize($('#chart')).catch(() => {}); }, 100);
+}).observe($('#figure-panel'));
+window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye'));
+readSelection();
+loadCatalogue();
