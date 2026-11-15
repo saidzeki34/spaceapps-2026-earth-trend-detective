@@ -1,9 +1,9 @@
 name: Task
-description: Create a small work item when the hackathon begins
+description: Assign a scoped teammate task from the shared skeleton
 body:
   - type: markdown
     attributes:
-      value: "Create solution implementation tasks only after the official event starts."
+      value: "Preparation has ended. Assign each teammate a scoped task; the shared starting point contains documentation and empty placeholders only."
   - type: textarea
     id: goal
     attributes:

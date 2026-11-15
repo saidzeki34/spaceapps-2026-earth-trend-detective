@@ -1,20 +1,22 @@
-# Connect to VS Code
+# Getting the shared skeleton
 
-The repository is already hosted on GitHub. **Do not create another repository or run `git init` in a new project folder.**
+Main is the team's starting point. Preparation has ended; the current repository delivery is documentation and empty placeholders.
 
-1. In VS Code press `Ctrl+Shift+P`.
-2. Search for **Git: Clone**, then paste `https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective.git`.
-3. Choose a local folder and select **Open** when VS Code prompts you.
-4. Use the branch selector at the bottom left, or press `Ctrl+Shift+P` → **Git: Checkout to...** → `develop`.
-5. Invite teammates from GitHub repository **Settings → Collaborators and teams** using their GitHub usernames. Each should clone the same repository.
-
-For reference, open a terminal via **Terminal → New Terminal** or `Ctrl+` ` (backtick), and use:
-```powershell
+```text
 git fetch origin
-git switch develop
-git pull --ff-only origin develop
+git switch main
+git pull --ff-only origin main
+git switch -c feature/your-task
 ```
 
-During the event create new `feature/<issue>-<topic>` branches. Create PRs targeting `develop` rather than directly pushing into `main`.
+Inspect git status before switching branches and preserve uncommitted teammate work. Use a separate checkout/worktree for simultaneous writers. Existing develop and work/* branches are retained; do not reset them. PRs target main.
 
-Set appropriate branch rules under GitHub **Settings → Rules → Rulesets** if available. Block deletions and force pushes on `main`/`develop`; use PR review when supported. Confirm these rules are actually active. Store API keys in GitHub/Vercel/Supabase secrets, never in source control.
+## Tools
+Open the repository root in your editor and read AGENTS.md. Existing editor recommendations, optional container configuration and documentation connections are retained from the administrative setup. Their presence does not select application dependencies or authorize cloud operations. No new dependency installation is required for this skeleton.
+
+There is no run, build or test command yet. ExecuteProgram.py, streamlit_app.py and module files are empty. Config and scripts folders contain tracking placeholders. Teammates should document dependency choices and commands in their implementation PRs.
+
+Supabase access remains documentation-only; Vercel remains disabled. Do not enable services or deploy as part of obtaining the skeleton. Keep credentials and account-local settings out of Git.
+
+## What was preserved
+The former generated implementation is on archive/generated-implementation at 165e09b, separate from main. Its contents are outside the accepted skeleton scope. Existing research and the historical preparation record remain available. Local untracked teammate files are not part of the delivery.

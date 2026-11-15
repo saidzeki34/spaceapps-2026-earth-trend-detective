@@ -1,9 +1,17 @@
 # Decision log
 
-Before official start: record administrative decisions only.
-
-| Date | Type | Decision | Owner |
-| --- | --- | --- | --- |
-| 2026-10-30 | Repository administration | Use `main`, `develop`, and small feature pull requests | Team to confirm |
-
-Record scientific and implementation choices only once the event begins.
+| Date | Decision | Basis |
+| --- | --- | --- |
+| 2026-10-30 | main/develop and feature PR workflow proposed | Historical administration record |
+| 2026-11-15 | Preparation ended; user explicitly confirmed competition start | User instruction |
+| 2026-11-15 | Latest scope is documentation, module responsibilities, folders and empty files only; teammates write code | User correction supersedes the broader handoff |
+| 2026-11-15 | Preserve generated implementation separately at archive/generated-implementation, commit 165e09b | Nothing lost; archive is not accepted main implementation |
+| 2026-11-15 | Verify main remained at 6576023 with only prior administrative/research content before skeleton work | Remote inspection; no implementation revert needed |
+| 2026-11-15 | Shared skeleton and future feature PRs target main; preserve develop/work/* | User's shared starting-point request |
+| 2026-11-15 | No algorithms, integrations, UI, models, database schemas or tests in this delivery | Explicit scope limit |
+| 2026-11-15 | Reorganize placeholders into ui and trend first, risk_assessment later, predictionmodel much later; shared holds common inputs and source access | User's section proposal; documentation and empty files only |
+| 2026-11-15 | Move historical analysis to trend, figures to ui/charts, models to predictionmodel and data/services/contracts/config to shared; add subsection placeholders | No implementation imported from the archive; risk_assessment uses the corrected spelling |
+| 2026-11-15 | Backend MVP starts in mountain_water/trend on work/backend/feature/camels-ch-trends (from work/backend/feature/mvp) | User approved backend plan with adjustments |
+| 2026-11-15 | Data: CAMELS-CH (Zenodo), observed daily series only; static attributes for filtering, labels and maps. Switzerland only; Norway, NASA data and forecasting deferred | User decision |
+| 2026-11-15 | Mountain filter defaults: mean elevation >= 1500 m, area <= 500 km², no reservoirs, >= 30 valid years; no glacier/non-glacier separation | User decision; thresholds remain tunable |
+| 2026-11-15 | Hydrological year Oct–Sep; 10-year comparison windows; Sen's slope + Mann-Kendall (trend-free pre-whitening) with Benjamini-Hochberg FDR | Plan approved by user; Hamed-Rao variance correction rejected because it returned undefined p-values for strong trends |

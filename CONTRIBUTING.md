@@ -1,10 +1,17 @@
-# Contribution workflow
+# Contributing
 
-- `main` is the final reviewed release; `develop` integrates teammate contributions.
-- During the hackathon, create short-lived `feature/<issue>-<topic>` branches from `develop`. Open pull requests into `develop`; merge reviewed `develop` into `main`.
-- Six reserved `work/*` branches are available but are not permanent team assignments.
-- Avoid force pushes and avoid directly editing shared branches.
-- Designate one integration coordinator. Coordinate edits to shared files through issues and PRs; VS Code Live Share is suitable for short pairing/debugging sessions.
-- Never commit credentials, local environment files, private participant information, or restricted datasets.
-- Attribute third-party data, code, images, libraries, models, and AI tools. Maintain the source ledger.
-- Do not implement the actual hackathon solution before the official local start.
+Main is the shared skeleton. Create small feature branches from current main and open PRs to main. This supersedes the historical develop-based integration workflow. Preserve develop and existing work/* branches; do not reset or force-push teammate branches.
+
+Agree one human owner and file boundaries for each task. Reserved branch names do not assign ownership. Use separate worktrees for simultaneous writers and coordinate changes to shared contracts.
+
+The main sections are mountain_water/ui and mountain_water/trend first, mountain_water/risk_assessment later, and mountain_water/predictionmodel much later. Common inputs and coordination live in mountain_water/shared. Agree edits to shared/contracts.py across section owners. Keep historical calculations out of UI files and do not make the first phase depend on deferred risk or prediction code.
+
+The initial delivery contains documentation and empty placeholders only. Teammates will implement algorithms, providers, UI and models in separately assigned tasks. Do not import the archived generated application wholesale.
+
+Keep PRs focused. Describe the problem, changed files, actual validation and unresolved questions. Honour required repository checks and reviews; do not bypass protections. Human review is required before presenting scientific claims as findings.
+
+There are no application tests to run for the skeleton. Its administrative verification is the changed-file scope, zero-byte placeholders and documentation consistency. Do not report those as passing application tests.
+
+Keep credentials, downloaded observations, local settings and caches out of commits. Document actual data/software/AI use and licences as work is added. Preserve missingness, units, provenance and temporal support in future interfaces.
+
+Module responsibilities and unassigned team work are in docs/architecture.md and docs/task-checklist.md. Hand off the branch/commit, changed files, checks and remaining questions.

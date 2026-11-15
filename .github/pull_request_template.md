@@ -1,13 +1,14 @@
-## Summary
-<!-- Link issue and describe the change. -->
+## Change
+Describe the task and changed files. PRs target main.
 
-## Testing
-<!-- Reproduction steps, tests, screenshots, scientific uncertainty as applicable. -->
+## Validation
+Record actual checks and limitations. For the initial skeleton, verify documentation and zero-byte placeholders; there is no application test suite.
 
 ## Attribution
-- [ ] Sources and licensing accounted for when applicable.
-- [ ] No secrets or protected material committed.
+- [ ] Sources and licences accounted for where applicable.
+- [ ] No credentials or teammate files overwritten.
 
 ## Review
-- [ ] PR targets `develop` or a reviewed final release to `main`.
-- [ ] Teammate requested for review.
+- [ ] Scope matches the assigned task.
+- [ ] Required repository checks and reviews satisfied.
+- [ ] Scientific claims reviewed by a human where applicable.
