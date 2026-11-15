@@ -271,7 +271,9 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
   padding: 5px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
 .backend-command { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; color: var(--ink-2); }
 .backend-note { margin: 8px 0; font-size: 13px; color: var(--ink-2); }
-.backend-chart { min-height: 330px; }
+.chart-viewport { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.backend-chart { min-height: 330px; width: 100%; }
+.graph.full .chart-viewport { flex: 1; min-height: 0; overflow: auto; }
 .graph.full .backend-chart { min-height: 0; }
 .backend-table { margin-top: 14px; }
 .backend-table caption { text-align: left; padding-bottom: 8px; color: var(--ink-2); }

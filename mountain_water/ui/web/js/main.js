@@ -214,7 +214,7 @@ function renderSide() {
       <label class="check"><input type="checkbox" id="statistics" ${state.statistics ? 'checked' : ''}><span>Statistics and saved records</span></label>
       <label class="check"><input type="checkbox" disabled><span>Physical models and prediction<small>Not implemented</small></span></label>
     </fieldset><hr class="rule"><label class="backend-select">Analysis<select id="view">${scopes.map(scope => `<optgroup label="${esc(SCOPES[scope] || scope)}">${views.filter(v => v.scope === scope).map(v => `<option value="${v.id}" ${v.id === state.view ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</optgroup>`).join('')}<optgroup label="Separate demonstration"><option value="__demo" ${isDemo() ? 'selected' : ''}>Synthetic 3D surface · imaginary</option></optgroup></select></label>
-    <p class="backend-note">${data.kind === 'model' ? 'GLDAS is unrouted model runoff, not measured river discharge.' : 'Only saved backend results are shown.'}</p>`;
+    <p class="backend-note">${isDemo() ? 'This separate demonstration uses invented values, unrelated to the selected river.' : data.kind === 'model' ? 'GLDAS is unrouted model runoff, not measured river discharge.' : 'Only saved backend results are shown.'}</p>`;
 }
 
 async function updateMap() {
@@ -260,7 +260,7 @@ function resultsShell() {
   const riverScope = spec?.scope === 'catchment' || spec?.id === 'source_regime';
   const heading = isDemo() ? 'Synthetic 3D surface' : riverScope ? `${esc(riverName(river))}${river?.place ? ` <small>at ${esc(river.place)}</small>` : ''}` : esc(spec?.scope === 'stations' ? 'Station network' : countryName(state.country));
   $('#results').innerHTML = `<header class="results-head"><div><h2>${heading}</h2><p class="results-meta" id="results-meta">${esc(dataset()?.label)} · ${esc(SCOPES[spec?.scope] || 'Synthetic demonstration')}</p></div><div class="head-actions"><button class="link" data-action="expand">${state.expanded ? 'Show the map' : 'Expand'}</button></div></header>
-    <div class="results-scroll"><figure class="graph${state.full ? ' full' : ''}" id="graph"><div class="graph-title">${esc(spec?.label || 'Synthetic 3D surface')}</div><p class="message" id="figure-status">Reading the saved river record…</p><div class="chart backend-chart" id="chart" hidden></div><div class="graph-foot"><span>${['timeseries', 'hydrograph_vs_history'].includes(state.view) ? `<label><input type="checkbox" id="usual" ${state.view === 'hydrograph_vs_history' ? 'checked' : ''}> Compare discharge with a usual year</label>` : esc(spec?.label || 'Synthetic demonstration')}</span><button class="link" data-action="full">${state.full ? 'Close full screen' : 'Full screen'}</button></div></figure><div id="figure-notes"></div><section class="block" id="records" ${state.statistics && !isDemo() ? '' : 'hidden'}><h3>Statistics and saved records</h3><p class="backend-note" id="row-count"></p><button class="link" id="download" disabled>Download CSV</button><div class="table-scroll backend-table" id="table-wrap"></div><div class="backend-pagination" id="pagination"></div></section></div>`;
+    <div class="results-scroll"><figure class="graph${state.full ? ' full' : ''}" id="graph"><div class="graph-title">${esc(spec?.label || 'Synthetic 3D surface')}</div><p class="message" id="figure-status">Reading the saved river record…</p><div class="chart-viewport" tabindex="0" role="region" aria-label="Scrollable analysis chart"><div class="chart backend-chart" id="chart" hidden></div></div><div class="graph-foot"><span>${['timeseries', 'hydrograph_vs_history'].includes(state.view) ? `<label><input type="checkbox" id="usual" ${state.view === 'hydrograph_vs_history' ? 'checked' : ''}> Compare discharge with a usual year</label>` : esc(spec?.label || 'Synthetic demonstration')}</span><button class="link" data-action="full">${state.full ? 'Close full screen' : 'Full screen'}</button></div></figure><div id="figure-notes"></div><section class="block" id="records" ${state.statistics && !isDemo() ? '' : 'hidden'}><h3>Statistics and saved records</h3><p class="backend-note" id="row-count"></p><button class="link" id="download" disabled>Download CSV</button><div class="table-scroll backend-table" id="table-wrap"></div><div class="backend-pagination" id="pagination"></div></section></div>`;
 }
 
 async function drawFigure(figure) {
@@ -281,6 +281,13 @@ async function drawFigure(figure) {
   layout.height = state.full ? Math.max(260, innerHeight - 125) : Math.max(state.expanded ? 440 : 330, height);
   $('#figure-status').hidden = true;
   const chart = $('#chart'); chart.hidden = false;
+  // A narrow panel scrolls the figure instead of crushing axes or station labels.
+  const minimum = state.view === 'timeseries' ? [520, 640, 760, 900][Math.min(3, variables.length - 1)]
+    : ['station_month_heatmap', 'station_year_heatmaps'].includes(state.view) ? 1400 : 640;
+  const title = typeof layout.title === 'string' ? layout.title : layout.title?.text || '';
+  const longestTitle = Math.max(0, ...title.split(/<br\s*\/?\s*>/i).map(line => line.replace(/<[^>]+>/g, '').length));
+  const titleWidth = Math.ceil(longestTitle * (layout.title?.font?.size || 17) * .6 + (layout.margin?.l || 60) + (layout.margin?.r || 60));
+  chart.style.minWidth = `${Math.max(minimum, Math.min(1800, titleWidth))}px`;
   await Plotly.react(chart, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false });
 }
 
