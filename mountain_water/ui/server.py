@@ -20,6 +20,8 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from mountain_water.si import disclosure
+
 HOST = "127.0.0.1"
 WEB_DIR = Path(__file__).resolve().parent / "web"
 # After the window says goodbye, wait this long before stopping: a page reload says goodbye too.
@@ -32,6 +34,7 @@ CONTENT_TYPES = {
     ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
+    ".webp": "image/webp",
     ".ico": "image/x-icon",
     ".txt": "text/plain; charset=utf-8",
 }
@@ -66,7 +69,10 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         self.server.closing_at = None  # someone is (still) there
         try:
-            if url.path == "/api/risk":
+            if url.path == "/si-use.json":
+                record = json.dumps(disclosure(), ensure_ascii=False, indent=2).encode("utf-8")
+                self._send(HTTPStatus.OK, CONTENT_TYPES[".json"], record)
+            elif url.path == "/api/risk":
                 from mountain_water.ui.risk_view import assessment
 
                 query = {key: values[0] for key, values in parse_qs(url.query).items()}
@@ -128,6 +134,8 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload, status: HTTPStatus = HTTPStatus.OK) -> None:
         from plotly.utils import PlotlyJSONEncoder
 
+        if isinstance(payload, dict) and status == HTTPStatus.OK:
+            payload = {**payload, "si_assistance": disclosure()}
         # Plotly's encoder retains typed arrays and converts NaN to JSON null.
         body = json.dumps(payload, cls=PlotlyJSONEncoder, ensure_ascii=False).encode("utf-8")
         self._send(status, CONTENT_TYPES[".json"], body)

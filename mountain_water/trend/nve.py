@@ -78,7 +78,6 @@ def default_end() -> str:
     return f"{year}-09-30"
 
 
-# --------------------------------------------------------------------------- HTTP clients
 
 
 def get_api_key() -> str:
@@ -149,7 +148,6 @@ class NveClient:
         return self._request("GET", f"{GTS}/GridTimeSeries/Themes/json")
 
 
-# --------------------------------------------------------------------------- station metadata
 
 
 def _first(record: dict, candidates: tuple[str, ...]):
@@ -221,7 +219,6 @@ def candidate_stations(attrs: pd.DataFrame, min_elevation: float | None, max_are
     return attrs[keep]
 
 
-# --------------------------------------------------------------------------- catchment polygons
 
 
 def station_key(value, area_no=None) -> tuple[int, int] | None:
@@ -301,7 +298,6 @@ def sample_points(geom, target: int = 20, cell: int = 1000) -> list[tuple[int, i
     return pts or [tuple(int(v) for v in geom.representative_point().coords[0])]
 
 
-# --------------------------------------------------------------------------- parsing
 
 
 def parse_discharge(payload: dict) -> pd.DataFrame:
@@ -344,7 +340,6 @@ def parse_senorge(payload: dict, start: str) -> pd.Series:
     return pd.Series(values, index=index)
 
 
-# --------------------------------------------------------------------------- download + load
 
 
 def load_stations(raw_dir: Path) -> pd.DataFrame:

@@ -36,7 +36,6 @@ OBS_FILE_PATTERN = re.compile(r"CAMELS_CH_obs_based_(?P<gauge_id>[^_.]+)\.csv$",
 _HEADER_UNIT = re.compile(r"^\s*(?P<name>[^(\[]+?)\s*[(\[](?P<unit>[^)\]]*)[)\]]\s*$")
 
 
-# --------------------------------------------------------------------------- download
 
 
 @dataclass
@@ -125,7 +124,6 @@ def download(
     return extract_dir
 
 
-# --------------------------------------------------------------------------- locate
 
 
 def find_dataset_root(raw_dir: Path = DEFAULT_RAW_DIR) -> Path:
@@ -148,7 +146,6 @@ def observed_files(root: Path) -> dict[str, Path]:
     return files
 
 
-# --------------------------------------------------------------------------- parse
 
 
 def split_header(column: str) -> tuple[str, str | None]:

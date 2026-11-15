@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from mountain_water.si import disclosure
+
 from . import camels_ch, comparison, drivers, gldas, nve, preprocessing, seasonal, trends
 from .catchment_grid import polygon_cell_weights
 from .flow_metrics import annual_volume_metrics
@@ -84,7 +86,8 @@ class TrendResults:
         directory.mkdir(parents=True, exist_ok=True)
         for name in TABLES:
             getattr(self, name).to_parquet(directory / f"{name}.parquet", index=False)
-        (directory / "meta.json").write_text(json.dumps(self.meta, indent=2, default=str))
+        metadata = {**self.meta, "si_assistance": disclosure()}
+        (directory / "meta.json").write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8")
 
 
 def _standard_columns(attrs: pd.DataFrame) -> pd.DataFrame:

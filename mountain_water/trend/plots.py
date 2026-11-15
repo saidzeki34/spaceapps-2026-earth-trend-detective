@@ -101,7 +101,6 @@ def _fmt_change(row: pd.Series, metric: str) -> str:
     return f"Sen's slope {change} · Mann-Kendall p = {p:.3f} ({sig})"
 
 
-# --------------------------------------------------------------------------- single catchment
 
 
 def hydrograph_vs_history(results, gauge_id: str, year: int, reference: tuple[int, int] | None = None,
@@ -282,7 +281,6 @@ def driver_scatter(results, gauge_id: str, metric: str, driver: str, theme: str 
     return fig
 
 
-# --------------------------------------------------------------------------- all catchments
 
 
 def trend_heatmap(results, kind: str = "volume", significance: str = "fdr", theme: str = "light") -> go.Figure:
@@ -436,7 +434,6 @@ def selection_summary(results, theme: str = "light") -> go.Figure:
     return fig
 
 
-# --------------------------------------------------------------------------- observed vs GLDAS
 
 
 def source_regime(obs, model, gauge_id: str, theme: str = "light") -> go.Figure:
@@ -513,7 +510,6 @@ def source_trend_scatter(trend_cmp: pd.DataFrame, obs, metric: str, theme: str =
     return fig
 
 
-# --------------------------------------------------------------------------- station network (stations.py)
 
 ROW_PX = 18          # height of one gauge row
 PANEL_GAP_PX = 120   # room above the second country panel for its title and column labels

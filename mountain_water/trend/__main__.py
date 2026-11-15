@@ -28,6 +28,8 @@ import logging
 import os
 from pathlib import Path
 
+from mountain_water.si import write_csv, write_figure_html
+
 from . import camels_ch, gldas, nve, pipeline, plots, sources, stations
 from .settings import StationNetworkSettings, TrendSettings
 
@@ -119,10 +121,10 @@ def _report(args) -> None:
     written = 0
     for name, fig in figures.items():
         if fig is not None:
-            fig.write_html(out / f"{name.replace('.', '_')}.html", include_plotlyjs="cdn")
+            write_figure_html(fig, out / f"{name.replace('.', '_')}.html")
             written += 1
     for name, table in tables.items():
-        table.to_csv(out / f"{name}.csv", index=False)
+        write_csv(table, out / f"{name}.csv", index=False)
     print(f"Wrote {written} figures and {len(tables)} tables to {out}")
 
 
@@ -145,7 +147,7 @@ def _stations(args) -> None:
         if net.annual[driver].notna().any():
             figures[f"driver_{flow}_vs_{driver}"] = plots.driver_change_scatter(net, flow, driver)
     for name, fig in figures.items():
-        fig.write_html(out / f"{name}.html", include_plotlyjs="cdn")
+        write_figure_html(fig, out / f"{name}.html")
     summary = stations.summary(net)
     tables = {"station_month_trends": stations.wide_table(net), "station_month_trends_long": net.trends,
               "station_month_summary": summary,
@@ -153,7 +155,7 @@ def _stations(args) -> None:
               "station_year_anomalies": stations.year_anomalies(net),
               "station_driver_changes": stations.driver_changes(net), "station_selection_log": net.selection_log}
     for name, table in tables.items():
-        table.to_csv(out / f"{name}.csv", index=False, float_format="%.4g")
+        write_csv(table, out / f"{name}.csv", index=False, float_format="%.4g")
     print(net.selection_log.to_string(index=False))
     print(summary[["country", "label", "n_gauges", "n_negative", "n_positive", "median_change_per_decade", "unit"]]
           .to_string(index=False))

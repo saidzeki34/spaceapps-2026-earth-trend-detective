@@ -32,6 +32,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from mountain_water.si import disclosure
+
 from . import camels_ch, nve, pipeline, trends
 from .drivers import _swe_dates
 from .settings import StationNetworkSettings
@@ -96,7 +98,8 @@ class StationNetwork:
         directory.mkdir(parents=True, exist_ok=True)
         for name in TABLES:
             getattr(self, name).to_parquet(directory / f"{name}.parquet", index=False)
-        (directory / "meta.json").write_text(json.dumps(self.meta, indent=2, default=str))
+        metadata = {**self.meta, "si_assistance": disclosure()}
+        (directory / "meta.json").write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8")
 
 
 def _label(row: pd.Series) -> str:
@@ -108,7 +111,6 @@ def _label(row: pd.Series) -> str:
     return f"{river} – {name} ({row['gauge_id']}){elev}{marks}"
 
 
-# --------------------------------------------------------------------------- selections
 
 
 def candidates(attrs: pd.DataFrame, s: StationNetworkSettings) -> tuple[list[str], list[tuple[str, int]]]:
@@ -206,7 +208,6 @@ def _norway(s: StationNetworkSettings) -> tuple[pd.DataFrame, pd.DataFrame, list
     return stations, obs, steps, meta
 
 
-# --------------------------------------------------------------------------- annual values and trends
 
 
 def _half_volume_day(q: pd.Series) -> float:
@@ -366,7 +367,6 @@ def load(processed_dir: Path | None = None) -> StationNetwork:
     return StationNetwork(**tables, meta=json.loads((directory / "meta.json").read_text()))
 
 
-# --------------------------------------------------------------------------- derived tables
 
 
 def change_matrix(network: StationNetwork, column: str = "change_per_decade") -> pd.DataFrame:
