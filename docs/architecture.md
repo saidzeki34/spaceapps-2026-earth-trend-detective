@@ -1,8 +1,8 @@
 # Sections and module responsibilities
 
-The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (later), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
+The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (experimental historical assessment), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
 
-The UI is a standard-library web server with HTML/CSS/JavaScript, not Streamlit. Its backend.py adapter reads saved trend outputs and calls trend.plots and table functions directly; river_geometry.py supplies cached verified course segments. See [the UI guide](../mountain_water/ui/README.md) for the current file map and [UI restoration](ui-restoration.md) for implementation boundaries. No scientific calculations are duplicated in the UI. Risk, prediction and shared coordination remain unfinished.
+The UI is a standard-library web server with HTML/CSS/JavaScript, not Streamlit. Its backend.py adapter reads saved trend outputs and calls trend.plots and table functions directly; river_geometry.py supplies cached verified course segments. risk_view.py adapts saved observed discharge to risk_assessment/assessment.py. See [the UI guide](../mountain_water/ui/README.md) for the current file map. Operational risk validation, prediction and shared coordination remain unfinished.
 
 The tables below preserve the original skeleton responsibilities, not a claim that every planned file exists or is complete.
 
@@ -16,7 +16,7 @@ mountain_water/
   ui/
     web/                # submitted web UI assets
   trend/
-  risk_assessment/       # later
+  risk_assessment/       # experimental historical diagnostics
   predictionmodel/       # much later
   shared/
     data/
@@ -28,7 +28,7 @@ tests/
 docs/
 ```
 
-The root entry points remain empty. Launch the UI via python -m mountain_water.ui and the backend via python -m mountain_water.trend. The backend's tests live in tests/trend/; shared, risk and prediction placeholders remain empty.
+The root entry points remain empty. Launch the UI via python -m mountain_water.ui and the backend via python -m mountain_water.trend. Tests live in tests/trend/, tests/risk_assessment/ and the UI test files. Shared and prediction modules remain placeholders; risk_assessment/assessment.py contains the accepted experimental implementation.
 
 ## ui — first phase
 
@@ -62,9 +62,11 @@ Owns investigation of historical observations. NASA environmental observations c
 
 Reference history is distinct from a user's requirement and from a future prediction. Historical association does not establish cause.
 
-## risk_assessment — later
+## risk_assessment — experimental historical assessment
 
 Owns the interpretation of water availability against a documented requirement. It consumes shared observations or reviewed trend outputs; it does not fetch a separate copy of the data.
+
+The accepted implementation is currently in assessment.py: complete-season volume, annual half-volume timing, descriptive trends, historical variability and optional constant-threshold exposure/events. ui/risk_view.py provides the read-only adapter and web/js/risk-rules.js contains explicitly uncalibrated presentation rules. The planned files below remain placeholders. See [risk implementation](risk-assessment-implementation.md) and [integration limits](ui-mechanics-integration.md); merging software does not validate its scientific interpretation.
 
 | Subsection | Placeholder file | Future responsibility |
 | --- | --- | --- |

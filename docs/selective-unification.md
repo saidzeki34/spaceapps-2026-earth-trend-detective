@@ -2,6 +2,8 @@
 
 The user requested that the current local version and submitted team work be combined without erasing anyone's progress. They specifically cautioned that Nikknezz may still be working. This is a selective integration, not a merge of every published branch.
 
+This records the completed PR #16 checkpoint. The user subsequently accepted Nikola's risk branch explicitly while excluding the Perplexity continuation; see [the later integration](ui-mechanics-integration.md). The inventory and test results below remain the historical record of PR #16.
+
 ## Version inventory
 
 | Version | Evidence and disposition |

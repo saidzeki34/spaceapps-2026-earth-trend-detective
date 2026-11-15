@@ -1,6 +1,6 @@
 # Working from the combined main branch
 
-Preparation has ended. Main combines the trend backend with a local web interface for saved results. Swiss/Norwegian observations, GLDAS model comparisons and station heatmaps are available when their corresponding outputs have been built. Risk assessment and prediction remain unimplemented.
+Preparation has ended. Main combines the trend backend with a local web interface for saved results. Swiss/Norwegian observations, GLDAS model comparisons and station heatmaps are available when their corresponding outputs have been built. The experimental water-flow assessment reads saved Swiss/Norwegian observations; it is not a validated operational risk model. Prediction remains unimplemented.
 
 ## Get a separate working folder
 

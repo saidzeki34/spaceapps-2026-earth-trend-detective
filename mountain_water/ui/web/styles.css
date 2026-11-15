@@ -90,6 +90,7 @@ select option { color: var(--k); background: var(--w); }
 .layout { display: grid; min-height: 0; grid-template-columns: var(--side) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "side map"; }
 .layout.has-results { grid-template-columns: var(--side) minmax(240px, 1fr) 5px var(--res, 50vw); grid-template-areas: "side map grip res"; }
 .layout.has-results.has-time { grid-template-rows: minmax(0, 1fr) 76px; grid-template-areas: "side map grip res" "side time grip res"; }
+.layout.has-time:not(.has-results) { grid-template-rows: minmax(0, 1fr) 76px; grid-template-areas: "side map" "side time"; }
 .layout.has-results.expanded { grid-template-columns: var(--side) minmax(0, 1fr); grid-template-areas: "side res"; }
 .layout.has-results.has-time.expanded { grid-template-areas: "side res" "side time"; }
 .layout.expanded .mapwrap, .layout.expanded .grip, .layout:not(.has-results) .grip, .layout:not(.has-results) .res, .layout:not(.has-time) .time { display: none; }
@@ -179,6 +180,7 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 .res-head p { color: var(--gw); margin-top: 8px; line-height: 1.5; }
 .res-side { text-align: right; display: grid; gap: 8px; justify-items: end; flex: none; }
 .res-side p { margin: 0; }
+.res-actions { display: flex; gap: 6px; }
 .res button, .res select { border: 1px solid var(--k); padding: 3px 8px 2px; text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
 .res button:hover:not(:disabled) { background: var(--k); color: var(--w); }
 .res select { appearance: none; padding-right: 20px; cursor: pointer; max-width: min(210px, 44cqi); text-overflow: ellipsis;
@@ -259,6 +261,7 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 .leaflet-control-attribution a { color: #d5d5d0 !important; }
 .map-back { background: var(--k); color: var(--w); border: 1px solid var(--w); padding: 6px 10px 5px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .map-back:hover { background: var(--w); color: var(--k); }
+.results-reopen { position: absolute; top: 10px; right: 10px; z-index: 1000; }
 .map-label { transform: translate(-50%, -50%); white-space: nowrap; font: 700 34px/1 var(--fc); letter-spacing: .02em; text-transform: uppercase; color: var(--w); cursor: pointer; padding: 6px 10px 4px; }
 .map-label:hover { background: var(--w); color: var(--k); }
 .gauge { width: 9px; height: 9px; background: var(--w); border: 1px solid var(--k); }
@@ -277,11 +280,13 @@ legend i { font-style: normal; color: var(--o); margin-right: 10px; }
 @media (max-width: 860px) {
   body { overflow: auto; }
   #app { height: auto; min-height: 100%; }
-  .layout, .layout.has-results, .layout.has-results.has-time, .layout.has-results.expanded, .layout.has-results.has-time.expanded {
+  .layout, .layout.has-results, .layout.has-results.has-time, .layout.has-time:not(.has-results), .layout.has-results.expanded, .layout.has-results.has-time.expanded {
     grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "side" "map" "time" "res"; }
   .mapwrap { height: 52vh; } .grip { display: none; } .side { border-right: 0; max-height: 46vh; }
   .time { height: 76px; }
   .crumbs { display: none; }
+  .top-right { flex: 1; min-width: 0; }
+  .top-right label, .top-right select { min-width: 0; }
   .pick li button { grid-template-columns: 40px minmax(0, 1fr); } .pick .ind { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .splash-bar i { animation: none; width: 60%; } }

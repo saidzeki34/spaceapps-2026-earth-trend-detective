@@ -30,7 +30,7 @@ export function createMap(element, geodata, handlers) {
   map.getPane("labels").style.pointerEvents = "none";
   map.getPane("shade").style.pointerEvents = "none";
   L.tileLayer(IMAGERY, { maxZoom: 13, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }).addTo(map);
-  L.tileLayer(LABELS, { maxZoom: 13, pane: "labels", attribution: "borders and names © Esri" }).addTo(map);
+  L.tileLayer(LABELS, { maxZoom: 13, pane: "labels", opacity: 0.4, attribution: "borders and names © Esri" }).addTo(map);
 
   // Everything outside the countries that can be explored is shaded.
   const holes = [];
@@ -48,9 +48,7 @@ export function createMap(element, geodata, handlers) {
   for (const code in geodata.countries) {
     const country = geodata.countries[code];
     const layer = L.polygon(country.polygons, { pane: "countries", color: COLOR.border,
-      weight: 1.4, fillColor: "#fff", fillOpacity: 0 }).addTo(map);
-    layer.on("mouseover", () => { if (shown.country !== code) layer.setStyle({ fillOpacity: 0.14 }); });
-    layer.on("mouseout", () => layer.setStyle({ fillOpacity: 0 }));
+      weight: 0.7, opacity: 0.35, fillColor: "#fff", fillOpacity: 0 }).addTo(map);
     layer.on("click", () => { if (shown.country !== code) handlers.country(code); });
     countryLayers[code] = layer;
     const b = country.bounds;
@@ -78,14 +76,23 @@ export function createMap(element, geodata, handlers) {
 
   function tip(river) {
     const detail = [river.place, river.id].filter(Boolean).map(esc).join(" · ");
-    return { html: `${esc(river.name || river.label || river.id)}<small>${detail}</small>`,
+    const at = position(river), course = courseFor(river);
+    const coordinates = at ? `<small>Gauge ${at[0].toFixed(5)}, ${at[1].toFixed(5)}</small>` : '';
+    const source = course?.properties?.match_method === 'station_position_only'
+      ? '<small>Channel matched by station position; river name differs.</small>' : '';
+    const extent = course ? '<small>Mapped sections; source and mouth not verified.</small>' : '';
+    return { html: `${esc(river.name || river.label || river.id)}<small>${detail}</small>${coordinates}${source}${extent}`,
       options: { sticky: true, direction: "top", offset: [0, -8], className: "map-tip" } };
   }
 
   function drawRivers() {
     riverLayer.clearLayers();
     if (!shown.country) return;
-    for (const river of rivers[shown.country] || []) {
+    // Several gauges can share the same upstream channel. Keep the selected
+    // course and its hit target above the others, regardless of list order.
+    const ordered = [...(rivers[shown.country] || [])].sort((a, b) =>
+      Number(String(a.id) === shown.river) - Number(String(b.id) === shown.river));
+    for (const river of ordered) {
       const selected = String(river.id) === shown.river, dim = shown.river && !selected;
       const pick = () => { if (!selected) handlers.river(String(river.id)); };
       const hint = tip(river), course = courseFor(river), at = position(river);
@@ -148,8 +155,7 @@ export function createMap(element, geodata, handlers) {
     shown = { country, river };
     for (const code in countryLabels) {
       if (shown.country) map.removeLayer(countryLabels[code]); else countryLabels[code].addTo(map);
-      countryLayers[code].setStyle({ opacity: !shown.country || code === shown.country ? 0.9 : 0.4,
-        weight: shown.country ? 1.1 : 1.4 });
+      countryLayers[code].setStyle({ opacity: 0.35, weight: 0.7, fillOpacity: 0 });
     }
     if (shown.country) back.addTo(map); else back.remove();
     drawRivers();

@@ -66,7 +66,12 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         self.server.closing_at = None  # someone is (still) there
         try:
-            if url.path in {"/api/catalog", "/api/figure", "/api/table", "/api/courses"}:
+            if url.path == "/api/risk":
+                from mountain_water.ui.risk_view import assessment
+
+                query = {key: values[0] for key, values in parse_qs(url.query).items()}
+                self._json(assessment(query))
+            elif url.path in {"/api/catalog", "/api/figure", "/api/table", "/api/courses"}:
                 from mountain_water.ui import backend
 
                 query = {key: values[0] for key, values in parse_qs(url.query).items()}
@@ -134,7 +139,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.NOT_FOUND, CONTENT_TYPES[".txt"], b"Not found")
             return
         content_type = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
-        self._send(HTTPStatus.OK, content_type, target.read_bytes())
+        body = target.read_bytes()
+        if target == WEB_DIR / "index.html":
+            # Load the isolated assessment without rewriting the selected UI template.
+            body = body.replace(b"</body>", b'<script type="module" src="/js/risk.js"></script></body>')
+        self._send(HTTPStatus.OK, content_type, body)
 
 
 def make_server(port: int, verbose: bool = False) -> AppServer:

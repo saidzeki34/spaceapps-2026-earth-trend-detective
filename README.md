@@ -8,7 +8,7 @@ The project direction is to investigate mountain-catchment water availability in
 
 Read the [project brief](docs/project-brief.md), [module responsibilities](docs/architecture.md), [interface planning notes](docs/data-contracts.md) and [contribution workflow](CONTRIBUTING.md). Existing research notes remain reference material, not implemented capabilities.
 
-The [selective unification handoff](docs/selective-unification.md) records the current selected UI, preserved versions and branches still awaiting submission.
+The [selective unification handoff](docs/selective-unification.md) records the preserved UI versions. The [mechanical fixes and risk integration handoff](docs/ui-mechanics-integration.md) records the later accepted risk branch and excluded continuation clone.
 
 ## Main sections
 
@@ -16,7 +16,7 @@ The [selective unification handoff](docs/selective-unification.md) records the c
 | --- | --- | --- |
 | ui/ | Controls, catchment overview, section views and charts | First phase |
 | trend/ | Historical flow, reference periods, seasons, timing, change, variability and comparison | First phase |
-| risk_assessment/ | Requirements, exposure, events and user/management context | Later |
+| risk_assessment/ | Historical flow diagnostics and user-supplied threshold scenarios | Experimental; operational validation pending |
 | predictionmodel/ | Model inputs, scenarios, comparison baseline, team physics model and evaluation | Much later |
 
 shared/ reserves common contracts, configuration, data access, quality, catchments, coordination, caching and export. Those modules remain placeholders. See the [subsection and file guide](docs/architecture.md) for intended responsibilities and the [trend guide](mountain_water/trend/README.md) for the existing backend.
@@ -43,7 +43,7 @@ python -m mountain_water.trend --help
 python -m pytest
 ```
 
-ExecuteProgram.py and streamlit_app.py remain empty; use the module command above. Streamlit is no longer used. See [SETUP.md](SETUP.md), the [UI guide](mountain_water/ui/README.md) and [the trend guide](mountain_water/trend/README.md). Risk assessment and the physics/prediction model remain unimplemented. A separate, labelled synthetic surface demonstrates 3D interaction only.
+ExecuteProgram.py and streamlit_app.py remain empty; use the module command above. Streamlit is no longer used. See [SETUP.md](SETUP.md), the [UI guide](mountain_water/ui/README.md) and [the trend guide](mountain_water/trend/README.md). Nikola's historical-flow assessment is available for saved observations; its screening rules are experimental, not validated operational risk. The physics/prediction model remains unimplemented. Surfaces use saved records, with missing cells left blank.
 
 Earlier generated implementation is preserved on [archive/generated-implementation](https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective/tree/archive/generated-implementation), commit 165e09b. It was never merged into main. It is an archive, not the accepted foundation; do not merge it wholesale.
 

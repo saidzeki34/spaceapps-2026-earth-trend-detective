@@ -53,7 +53,7 @@ const WATER = new Set(['discharge_vol', 'discharge_spec', 'waterlevel', 'runoff_
 
 const state = {
   occupation: null, country: null, river: null, dataset: 'ch', year: null, interval: 'monthly',
-  variables: ['temperature_mean', 'discharge_vol'], sections: ['risk', 'statistics'], opts: {}, region: null, expanded: false,
+  variables: ['temperature_mean', 'discharge_vol'], sections: ['risk', 'statistics'], opts: {}, region: null, expanded: false, resultsClosed: false,
 };
 let catalog, geodata, map, courseRequest = 0, yearTimer = null, resizeTimer = null, fullId = null;
 const courseCache = new Map();
@@ -234,18 +234,38 @@ function openApp() {
 function go(changes) {
   clearTimeout(yearTimer);
   if ('river' in changes && !changes.river) state.expanded = false;
+  state.resultsClosed = false;
   Object.assign(state, changes);
   render();
 }
 
 function render() {
   normalize();
-  const hasResults = Boolean(state.river) || (Boolean(state.country) && regionTabs().length > 0);
-  const layout = $('#layout');
-  layout.classList.toggle('has-results', hasResults);
-  layout.classList.toggle('has-time', Boolean(state.river));
-  layout.classList.toggle('expanded', hasResults && state.expanded);
+  syncResultsVisibility();
   renderCrumbs(); renderSide(); renderTimeline(); renderResults(); updateMap(); remember();
+}
+
+function syncResultsVisibility() {
+  const hasResults = Boolean(state.river) || (Boolean(state.country) && regionTabs().length > 0);
+  const visible = hasResults && !state.resultsClosed;
+  const layout = $('#layout');
+  layout.classList.toggle('has-results', visible);
+  layout.classList.toggle('has-time', Boolean(state.river));
+  layout.classList.toggle('expanded', visible && state.expanded);
+  $('#results').hidden = !visible;
+  $('[data-action="show-results"]').hidden = !hasResults || visible;
+  $('[data-action="show-results"]').setAttribute('aria-expanded', String(visible));
+}
+
+function setResultsClosed(closed) {
+  if (closed && fullId) setFull(null);
+  state.resultsClosed = closed;
+  syncResultsVisibility();
+  if (closed) $('[data-action="show-results"]').focus();
+  else {
+    for (const block of live.values()) if (block.payload) draw(block);
+    $('[data-action="close-results"]')?.focus();
+  }
 }
 
 function renderCrumbs() {
@@ -354,7 +374,7 @@ const usesOption = (block, name) => Boolean(block.view) && (spec(block.view, blo
 function blockHTML(block, number) {
   const options = (spec(block.view, block.dataset || state.dataset)?.options || []).filter(o => !['year', 'variable', 'interval'].includes(o.name));
   const selects = options.map(o => `<select data-opt="${esc(o.name)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v.id)}" ${String(v.id) === String(state.opts[o.name]) ? 'selected' : ''}>${esc(splitLabel(v.label)[0])}</option>`).join('')}</select>`).join('');
-  const actions = block.kind ? '' : '<button data-act="table">Table</button><button data-act="csv">CSV</button><button data-act="full">Full</button>';
+  const actions = block.kind ? '' : '<button data-act="rescale" title="Fit all axes to the displayed data in their original units">Rescale</button><button data-act="table">Table</button><button data-act="csv">CSV</button><button data-act="full">Full</button>';
   return `<section class="fig" id="fig-${block.id}" data-block="${block.id}">
     <header><span class="no">${String(number).padStart(2, '0')}</span><h3>${esc(block.title)}</h3><span class="opts">${selects}</span><span class="acts">${actions}</span></header>
     <p class="cap" hidden></p><p class="msg">Loading</p><div class="scroll"><div class="plot" hidden></div></div><div class="tbl" hidden></div></section>`;
@@ -372,11 +392,11 @@ function renderResults() {
     }
     blocks = blocks.filter(b => b.kind || spec(b.view));
     const facts = [river.place || river.name, `No. ${river.id}`, finite(river.elevation_m) && `${Math.round(river.elevation_m)} m`, finite(river.area_km2) && `${significant(river.area_km2)} km²`].filter(Boolean);
-    head = `<header class="res-head"><div><h2>${esc(riverName(river))}</h2><p>${esc(facts.join(' · '))}</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button></div></header>`;
+    head = `<header class="res-head"><div><h2>${esc(riverName(river))}</h2><p>${esc(facts.join(' · '))}</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><span class="res-actions"><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button><button data-action="close-results" aria-label="Close results panel">Close</button></span></div></header>`;
   } else if (state.country && regionTabs().length) {
     const tabs = regionTabs(), current = tabs.find(t => t.view === state.region) || tabs[0];
     blocks = [{ id: current.view, view: current.view, dataset: current.dataset, title: TITLES[current.view] }];
-    head = `<header class="res-head"><div><h2>${esc(countryName(state.country))}</h2><p>${data.count} rivers compared</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button></div></header>
+    head = `<header class="res-head"><div><h2>${esc(countryName(state.country))}</h2><p>${data.count} rivers compared</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><span class="res-actions"><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button><button data-action="close-results" aria-label="Close results panel">Close</button></span></div></header>
       <nav class="tabs">${tabs.map(t => `<button data-region="${t.view}" class="${t.view === current.view ? 'on' : ''}">${esc(TITLES[t.view])}</button>`).join('')}</nav>`;
   } else { element.innerHTML = ''; return; }
   element.innerHTML = `${head}${blocks.map((b, i) => blockHTML(b, i + 1)).join('')}<p class="foot">Sen's slope per decade · Mann-Kendall test · FDR per metric. Statistical association, not cause.</p>`;
@@ -521,7 +541,7 @@ function draw(block) {
 
 async function paint(block) {
   const element = $(`#fig-${block.id}`);
-  if (!element || !block.payload || !window.Plotly || live.get(block.id) !== block) return;
+  if (!element || !block.payload || !window.Plotly || state.resultsClosed || live.get(block.id) !== block) return;
   block.width = element.clientWidth;
   const { data, layout, caption } = styleFigure(block.payload.figure, block);
   const plot = $('.plot', element), cap = $('.cap', element);
@@ -546,6 +566,37 @@ async function paint(block) {
   plot.dataset.shape = shape;
 }
 
+// Restore the visible range of every axis without changing or normalizing observations.
+// Queue this with drawing so adding a variable and rescaling cannot race Plotly's axis setup.
+function rescale(block) {
+  block.drawing = (block.drawing || Promise.resolve()).then(async () => {
+    const plot = $(`#fig-${block.id} .plot`);
+    if (!plot?.layout || state.resultsClosed || live.get(block.id) !== block) return;
+    const updates = {};
+    for (const key of Object.keys(plot.layout)) {
+      // A surface can retain unused Cartesian axes in its input layout. Relayout must
+      // only address axes Plotly actually created, otherwise its domain lookup fails.
+      if (/^[xy]axis\d*$/.test(key) && plot._fullLayout?.[key]) {
+        updates[`${key}.autorange`] = true;
+        // Each variable keeps its own units and exponent; mixed units are never normalized.
+        if (['linear', 'log'].includes(plot._fullLayout?.[key]?.type) && !plot.layout[key].tickformat) {
+          updates[`${key}.exponentformat`] = 'power';
+          updates[`${key}.showexponent`] = 'first';
+        }
+      } else if (/^scene\d*$/.test(key)) {
+        for (const axis of ['xaxis', 'yaxis', 'zaxis']) {
+          updates[`${key}.${axis}.range`] = null;
+          updates[`${key}.${axis}.autorange`] = true;
+        }
+        const camera = styleFigure(block.payload.figure, block).layout[key]?.camera;
+        if (camera) updates[`${key}.camera`] = camera;
+      }
+    }
+    if (Object.keys(updates).length) await Plotly.relayout(plot, updates);
+  });
+  return block.drawing;
+}
+
 // Risk assessment: the saved trend rows, straight from the backend's table. No score is computed.
 function drawHeadline(element, rows) {
   const byMetric = Object.fromEntries(rows.map(r => [r.metric, r]));
@@ -566,19 +617,28 @@ function drawHeadline(element, rows) {
   const body = $('.tbl', element);
   body.hidden = false;
   body.className = 'tbl headline';
-  body.innerHTML = `<p class="key">Saved trend indicators only. Risk assessment, requirements, exposure estimates and risk scores are not implemented. Indicator selections by occupation await team review.</p><div class="readout">${cells}</div>${table}`;
+  body.innerHTML = `<p class="key">Saved trend indicators. The experimental assessment reports historical threshold exposure; operational risk remains unvalidated. Indicator selections by occupation await team review. <button type="button" data-risk-open>Open water-flow assessment</button></p><div class="readout">${cells}</div>${table}`;
 }
 
 // ---------------------------------------------------------------- tables and export
 async function tableFor(block) {
-  if (!block.table) {
-    const query = params(block);
-    query.set('table', spec(block.view, block.dataset || state.dataset).table);
+  const selection = params(block).toString(), ticket = block.ticket;
+  const current = () => live.get(block.id) === block && block.ticket === ticket && params(block).toString() === selection;
+  if (block.table && block.tableSelection === selection) return block.table;
+  const query = new URLSearchParams(selection);
+  query.set('table', spec(block.view, block.dataset || state.dataset).table);
+  try {
     const payload = await api(`/api/table?${query}`);
+    // A year, river, source or option may have changed while this table was loading.
+    // An old response must neither replace the current cache nor become a CSV download.
+    if (!current()) return null;
     if (payload.status !== 'ready') throw new Error(payload.message || 'No saved records.');
-    block.table = payload; block.page = 0;
+    block.table = payload; block.tableSelection = selection; block.page = 0;
+    return payload;
+  } catch (error) {
+    if (!current()) return null;
+    throw error;
   }
-  return block.table;
 }
 
 function renderTable(block) {
@@ -628,8 +688,9 @@ document.addEventListener('click', async event => {
     const body = $(`#fig-${block.id} .tbl`);
     try {
       if (act.dataset.act === 'full') setFull(fullId === block.id ? null : block.id);
-      else if (act.dataset.act === 'table') { if (!body.hidden) { body.hidden = true; return; } await tableFor(block); renderTable(block); }
-      else if (act.dataset.act === 'csv') { await tableFor(block); downloadCSV(block); }
+      else if (act.dataset.act === 'rescale') await rescale(block);
+      else if (act.dataset.act === 'table') { if (!body.hidden) { body.hidden = true; return; } if (await tableFor(block)) renderTable(block); }
+      else if (act.dataset.act === 'csv') { if (await tableFor(block)) downloadCSV(block); }
       else if (act.dataset.act === 'prev') { block.page--; renderTable(block); }
       else if (act.dataset.act === 'next') { block.page++; renderTable(block); }
     } catch (error) { body.hidden = false; body.innerHTML = `<p class="pager"><span>${esc(error.message)}</span></p>`; }
@@ -648,6 +709,8 @@ document.addEventListener('click', async event => {
   else if (d.action === 'about') $('#about').showModal();
   else if (d.action === 'refresh') reloadSaved();
   else if (d.action === 'retry') location.reload();
+  else if (d.action === 'close-results') setResultsClosed(true);
+  else if (d.action === 'show-results') setResultsClosed(false);
   else if (d.action === 'expand') { state.expanded = !state.expanded; $('#layout').classList.toggle('expanded', state.expanded); target.textContent = state.expanded ? 'Map' : 'Expand'; remember(); }
 });
 

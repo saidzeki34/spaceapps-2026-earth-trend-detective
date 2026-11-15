@@ -27,12 +27,12 @@ Each source is reported as ready, not built or unreadable from the files actuall
 
 - **Country.** The left box lists the saved gauged rivers; the results box compares them (trend and window-change heatmaps, trend against catchment attribute, attribution, selection) and shows the station network (station/month, station/year, driver changes) when that build includes the country.
 - **River.** The left box holds the reference and water-availability variables (up to four, drawn on one graph with one colour-coded axis per variable), the assessments and the calculation step (monthly average or daily). A ticked variable with no saved value in the chosen year stays in the legend as "no data" and is named under the graph. Every ticked assessment adds its figures under the graph:
-  - *Risk assessment*: the saved Sen's slope and Mann-Kendall result for annual volume, half-volume date and daily-flow CV, a table of the saved indicators the chosen occupation reads first (`OCCUPATIONS` in `web/js/main.js`; these lists need review by the risk-assessment owner), and the flow surface.
+  - *Risk assessment*: the saved Sen's slope and Mann-Kendall result for annual volume, half-volume date and daily-flow CV, a table of the saved indicators the chosen occupation reads first (`OCCUPATIONS` in `web/js/main.js`; these lists need review by the risk-assessment owner), and the flow surface. **Open water-flow assessment** opens Nikola's experimental historical diagnostics and optional user-supplied threshold scenario for saved Swiss/Norwegian observations. GLDAS is rejected for this assessment rather than silently substituted with observations.
   - *Statistics*: annual metric with trend, 10-year window means.
   - *Seasonal regime*: year against history, regime by window, daily flow of all years.
   - *Drivers*: driver correlations, flow against driver.
 - **Timeline.** Under the map; drag or use the arrow keys to pick a saved hydrological year. The forecast slot is shown as unavailable: no forecast model is connected.
-- Every figure has **Table** (the saved records behind it, paged), **CSV** (all of those records) and **Full** (full screen; Esc closes). **Expand** hides the map; the divider between map and results can be dragged.
+- Every figure has **Rescale** (fit all axes to the displayed data in their original units), **Table** (the saved records behind it, paged), **CSV** (all of those records) and **Full** (full screen; Esc closes). Rescale does not normalize different physical units. **Expand** hides the map; the divider between map and results can be dragged. **Close** hides the results panel while retaining the selected river and timeline; **Results** on the map reopens it.
 
 Figures and numbers come from the existing backend (`mountain_water.trend.plots`, `stations` and the saved tables). Reference periods, hydrological/calendar years, units, missing values and significance conventions are kept from it; associations do not establish causation. The interface changes only typography and line colours of the backend figures. Not shown: the backend's trend map (it needs a base-map file from an external server, and the satellite map already shows the gauges) and the observed-against-GLDAS comparison figures (removed at the owner's request; a saved GLDAS build can still be opened as a source).
 
@@ -44,7 +44,7 @@ The map shows gauge points and cached OpenStreetMap river segments where a conse
 
 ## Not implemented
 
-Requirements, risk scores and forecasts are not implemented, and none are invented. The occupation only selects which saved trend rows the risk assessment lists.
+Validated operational requirements, risk probabilities and forecasts are not implemented, and none are invented. An optional threshold is a user-supplied historical scenario, not a researched demand estimate. The experimental assessment's hardcoded screening rules are explicitly uncalibrated; changing occupation clears the scenario threshold. Scientific and operational interpretation require human review.
 
 ## Look
 
@@ -58,12 +58,13 @@ One typeface (DIN; Bahnschrift on Windows, DIN Alternate on macOS, Arial elsewhe
 | server.py | Static files and read-only JSON routes |
 | backend.py | Saved-result catalogue, allowlisted backend figures/tables, refresh |
 | river_geometry.py | Cached course lookup with match validation and attribution |
-| risk_view.py, prediction_view.py | Explicitly unfinished placeholders |
+| risk_view.py | Read-only adapter for experimental historical-flow assessment |
+| prediction_view.py | Unfinished placeholder |
 | web/index.html, styles.css, js/ | Screens, map, figures and table presentation |
 | web/vendor/leaflet/ | Leaflet 1.9.4 and licence |
 | web/data/ | Display geometry with attribution |
 | map_component/ | Reproducible geometry tools and provenance |
 
-`GET /api/catalog` lists datasets, available options and views. `GET /api/figure` and `/api/table` accept allowlisted selection parameters. `GET /api/courses?dataset=ch` returns verified course segments and unmatched explanations. `POST /api/refresh` clears saved-result caches. `/vendor/plotly.min.js` serves the runtime from the installed Plotly package, keeping it compatible with the Python figures. No CDN or frontend build is required for charts. Map background tiles need internet; saved figures and cached geometry do not.
+`GET /api/catalog` lists datasets, available options and views. `GET /api/figure` and `/api/table` accept allowlisted selection parameters. `GET /api/courses?dataset=ch` returns verified course segments and unmatched explanations. `GET /api/risk` reads observed discharge for a gauge, selected season, analysis/baseline years and optional threshold. `POST /api/refresh` clears saved-result caches. `/vendor/plotly.min.js` serves the runtime from the installed Plotly package, keeping it compatible with the Python figures. No CDN or frontend build is required for charts. Map background tiles need internet; saved figures and cached geometry do not.
 
 Earlier interfaces remain preserved: the first web UI on archive/ui-handoff-20261115 and the industrial redesign on feature/industrial-results-ui.
