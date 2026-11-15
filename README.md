@@ -8,6 +8,17 @@ The project direction is to investigate mountain-catchment water availability in
 
 Read the [project brief](docs/project-brief.md), [module responsibilities](docs/architecture.md), [interface planning notes](docs/data-contracts.md) and [contribution workflow](CONTRIBUTING.md). Existing research notes remain reference material, not implemented capabilities.
 
+## Main sections
+
+| Folder under mountain_water/ | Planned scope | Timing |
+| --- | --- | --- |
+| ui/ | Controls, catchment overview, section views and charts | First phase |
+| trend/ | Historical flow, reference periods, seasons, timing, change, variability and comparison | First phase |
+| risk_assessment/ | Requirements, exposure, events and user/management context | Later |
+| predictionmodel/ | Model inputs, scenarios, comparison baseline, team physics model and evaluation | Much later |
+
+shared/ supports these sections with common contracts, configuration, data access, quality, catchments, coordination, caching and export. All files remain empty. See the [subsection and file guide](docs/architecture.md) for individual responsibilities.
+
 ## Start a teammate branch
 
 ```text
