@@ -10,6 +10,7 @@ python -m mountain_water.trend download        # Zenodo -> data/raw/camels_ch/v<
 python -m mountain_water.trend inspect         # list files, columns and units of the download
 python -m mountain_water.trend build           # -> data/processed/trend/*.parquet
 python -m mountain_water.trend report --gauge 2268 --gauge 2327   # -> data/exports/trend/*.html + *.csv
+python -m mountain_water.trend stations        # station x month heatmap -> data/exports/trend_stations
 python -m pytest                               # synthetic CAMELS-CH-shaped fixture
 ```
 
@@ -132,6 +133,48 @@ Data notes:
 - Some catchments still have hydropower plants (`hp_count` > 0), and 2347 is named a compensation basin. Check them before interpreting their trends.
 
 The automated tests (`python -m pytest`) use a small synthetic dataset with the same layout (`tests/trend/conftest.py`), so they run without the download.
+
+## Station × month heatmap
+
+`python -m mountain_water.trend stations` (`stations.py`) shows three things in one figure: **when** in the year flow is changing, **whether the same pattern appears across catchments**, and **whether late-summer losses are larger than the change in annual supply**. It has its own selection and uses calendar years, separate from `build`:
+
+- **Selection.** Swiss CAMELS-CH gauges (`country` CH) on rivers (`water_body_type` stream) with a valid, non-negative discharge on every day of 1981–2020 and some flow in every year. No gaps are filled. The gauges are ranked by mean catchment elevation (`elev_mean`) and the highest 100 are kept. There is **no reservoir filter**, and some catchments are nested. The `stations` table and the CSV carry glacier cover, reservoir and hydropower counts, so regulated gauges can be checked before their slopes are interpreted.
+- **Per gauge and calendar year:**
+  - monthly volume (hm³);
+  - August–September volume;
+  - annual volume;
+  - the lowest 7-day mean flow, counting only 7-day windows that lie entirely within August–September;
+  - the half-volume date (the day of the year by which half the year's volume has passed).
+
+  29 February is left out, so every year has 365 days.
+- **Per gauge and value:**
+  - Sen's slope per decade, as % of the gauge's 1981–2000 mean (the half-volume date in days, negative = earlier);
+  - the Mann-Kendall p-value with trend-free pre-whitening;
+  - the Benjamini-Hochberg FDR per column.
+
+  ● in the figure marks p < 0.05 after FDR.
+- **Second figure** (`station_year_heatmaps`). The gauges are in the same order, with one column per year: August–September volume anomaly (left) and half-volume date anomaly (right), both relative to each gauge's 1981–2000 mean. It shows whether the slopes come from gradual shifts, a few dry years shared across the network, or an abrupt change at one gauge.
+
+Options: `--n-gauges 100 --period 1981 2020 --baseline 1981 2000 --all-countries`. Outputs in `data/exports/trend_stations`:
+- `station_month_heatmap.html` and `station_year_heatmaps.html`;
+- `station_month_trends.csv` (wide, one row per gauge) and `station_month_trends_long.csv` (with p-values);
+- `station_month_summary.csv` (counts of negative and positive slopes, and the median, per column);
+- `station_year_anomalies.csv`;
+- `station_selection_log.csv`.
+
+**Run on CAMELS-CH v0.9 (2026-11-15):** 331 catchments → 229 in Switzerland → 196 rivers → 139 complete for 1981–2020 → the 100 highest kept. The lowest has a mean elevation of 986 m. The selection is the same as the exploratory script `plot_station_trends.py` this view was adapted from. All values match that script except February, annual volume and the half-volume date, which differ by at most 1.4 percentage points, 0.2 percentage points and 0.7 days because of leap-day handling. A gauge with whole years of zero flow (2079, Canale industriale at Le Prese) is excluded. Results:
+
+| Value | Negative slope (of 100 gauges) | Median change per decade |
+| --- | --- | --- |
+| July volume | 97 | −7.1 % |
+| August volume | 62 | −1.1 % |
+| September volume | 93 | −5.3 % |
+| Aug–Sep volume | 87 | −3.9 % |
+| Annual volume | 87 | −2.4 % |
+| Aug–Sep 7-day low | 68 | −2.6 % |
+| Half-volume date | 74 earlier, 16 later | −1.1 days |
+
+These are descriptive slopes for one selection over one period. They are not a regional estimate and not attribution. Testing a second common period and adding uncertainty intervals that allow for year-to-year dependence are still open.
 
 ## Interpretation limits
 
