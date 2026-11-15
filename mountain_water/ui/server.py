@@ -16,17 +16,14 @@ import time
 import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from functools import lru_cache
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
-
-from mountain_water.ui import controls, wording
-from mountain_water.ui.state import Selection
+from urllib.parse import parse_qs, unquote, urlsplit
 
 HOST = "127.0.0.1"
 WEB_DIR = Path(__file__).resolve().parent / "web"
 # After the window says goodbye, wait this long before stopping: a page reload says goodbye too.
 CLOSE_GRACE_SECONDS = 2.5
-COMPLETE_YEAR_DAYS = 360
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -40,44 +37,12 @@ CONTENT_TYPES = {
 }
 
 
-def _latest_complete_year(data) -> int:
-    flow_days = data.daily.dropna(subset=["discharge_vol"])["date"].dt.year.value_counts()
-    complete = [year for year in data.years if flow_days.get(year, 0) >= COMPLETE_YEAR_DAYS]
-    return complete[-1] if complete else data.years[-1]
+@lru_cache(maxsize=1)
+def _plotly_js() -> bytes:
+    """Use the installed Plotly runtime, matching the backend figure version."""
+    from plotly.offline import get_plotlyjs
 
-
-def view(selection: Selection) -> dict:
-    """Everything the right-hand box shows for one selection."""
-    from mountain_water.ui import data_source, overview, prediction_view, risk_view, trend_view
-
-    data = data_source.river_data(selection.river)
-    year = selection.year
-    if year not in data.years and year != data.prediction_year:
-        year = _latest_complete_year(data)
-    predicted = year == data.prediction_year
-    method = controls.METHOD_MONTHLY if predicted else selection.method  # a prediction is always per month
-    variables = list(selection.variables)
-
-    if predicted:
-        chart = prediction_view.chart(data, variables, year, selection.usual)
-    else:
-        chart = trend_view.chart(data, variables, year, method, selection.usual)
-    result = {
-        "river": overview.river_summary(data),
-        "year": year,
-        "predicted": predicted,
-        "method": method,
-        "chart": chart,
-    }
-    if "risk" in selection.sections:
-        occupation = controls.OCCUPATIONS_BY_ID[selection.occupation]
-        flow = prediction_view.predicted_flow(data, year) if predicted else None
-        result["risk"] = risk_view.assess(data, occupation, year, flow)
-    if "statistics" in selection.sections:
-        result["statistics"] = trend_view.statistics(data, variables, year, predicted)
-    if "physical" in selection.sections:
-        result["physical"] = prediction_view.physical_model(data, year, predicted)
-    return result
+    return get_plotlyjs().encode("utf-8")
 
 
 class AppServer(ThreadingHTTPServer):
@@ -101,24 +66,33 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         self.server.closing_at = None  # someone is (still) there
         try:
-            if url.path == "/api/bootstrap":
-                self._json(controls.catalogue())  # the menus: ready at once
-            elif url.path == "/api/rivers":
-                from mountain_water.ui import overview
+            if url.path in {"/api/catalog", "/api/figure", "/api/table", "/api/courses"}:
+                from mountain_water.ui import backend
 
-                self._json(overview.rivers())  # waits until the data has been read
-            elif url.path == "/api/outlines":
-                from mountain_water.ui import data_source
+                query = {key: values[0] for key, values in parse_qs(url.query).items()}
+                if url.path == "/api/catalog":
+                    result = backend.catalogue()
+                elif url.path == "/api/figure":
+                    result = backend.figure(query)
+                elif url.path == "/api/table":
+                    result = backend.table(query)
+                else:
+                    from mountain_water.ui.river_geometry import geojson_for_gauges
 
-                self._json(data_source.catchment_outlines())
-            elif url.path == "/api/view":
-                self._json(view(Selection.from_query(parse_qs(url.query))))
+                    datasets = {item["id"]: item for item in backend.catalogue()["datasets"]}
+                    dataset = datasets[query.get("dataset", "ch")]
+                    result = geojson_for_gauges(dataset.get("gauges", []))
+                self._json(result)
+            elif url.path == "/vendor/plotly.min.js":
+                self._send(HTTPStatus.OK, CONTENT_TYPES[".js"], _plotly_js())
             elif url.path.startswith("/api/"):
                 self._json({"error": "Unknown request."}, HTTPStatus.NOT_FOUND)
             else:
                 self._file(url.path)
         except KeyError:
-            self._json({"error": "That river is not in the list."}, HTTPStatus.NOT_FOUND)
+            self._json({"error": "Unknown dataset, gauge or view."}, HTTPStatus.NOT_FOUND)
+        except ValueError as error:
+            self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
         except ConnectionError:
             pass  # the window went away while we were answering
         except Exception as error:  # noqa: BLE001 - show the problem on screen instead of a dead page
@@ -126,10 +100,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": f"{type(error).__name__}: {error}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        if urlsplit(self.path).path == "/api/bye" and self.server.auto_exit:
-            self.server.closing_at = time.monotonic() + CLOSE_GRACE_SECONDS
-        self._json({"ok": True})
+        path = urlsplit(self.path).path
+        if path == "/api/refresh":
+            from mountain_water.ui import backend
+
+            backend.refresh()
+            self._json({"ok": True})
+        elif path == "/api/bye":
+            if self.server.auto_exit:
+                self.server.closing_at = time.monotonic() + CLOSE_GRACE_SECONDS
+            self._json({"ok": True})
+        else:
+            self._json({"error": "Unknown request."}, HTTPStatus.NOT_FOUND)
 
     def _send(self, status: HTTPStatus, content_type: str, body: bytes) -> None:
         self.send_response(status)
@@ -140,11 +122,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _json(self, payload, status: HTTPStatus = HTTPStatus.OK) -> None:
-        body = json.dumps(wording.clean(payload), ensure_ascii=False, allow_nan=False).encode("utf-8")
+        from plotly.utils import PlotlyJSONEncoder
+
+        # Plotly's encoder retains typed arrays and converts NaN to JSON null.
+        body = json.dumps(payload, cls=PlotlyJSONEncoder, ensure_ascii=False).encode("utf-8")
         self._send(status, CONTENT_TYPES[".json"], body)
 
     def _file(self, path: str) -> None:
-        relative = "index.html" if path in ("", "/") else path.lstrip("/")
+        relative = "index.html" if path in ("", "/") else unquote(path).lstrip("/")
         target = (WEB_DIR / relative).resolve()
         if not target.is_relative_to(WEB_DIR) or not target.is_file():
             self._send(HTTPStatus.NOT_FOUND, CONTENT_TYPES[".txt"], b"Not found")

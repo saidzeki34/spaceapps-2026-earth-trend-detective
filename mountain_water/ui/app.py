@@ -61,10 +61,10 @@ def open_window(url: str, in_browser_tab: bool = False) -> None:
 
 
 def _read_data_in_background() -> None:
-    """Load the data while the window opens, so the loading screen is short."""
-    from mountain_water.ui import data_source
+    """Read saved backend outputs while the window opens; never download data."""
+    from mountain_water.ui import backend
 
-    data_source.warm_up()
+    backend.catalogue()
 
 
 def main(argv: list[str] | None = None) -> None:

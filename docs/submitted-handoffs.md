@@ -1,5 +1,7 @@
 # Submitted UI and trend handoffs — 2026-11-15
 
+This is the historical integration record. The subsequent [UI completion](ui-completion.md) removes the imaginary stand-ins described below and connects additional saved backend outputs.
+
 The user confirmed that Claude's UI and Jonathan's trend work were handed in and requested convergence on main. This supersedes the current-state description in the [earlier integration handoff](team-integration.md), which remains a historical record of PR #9.
 
 ## Preserved sources

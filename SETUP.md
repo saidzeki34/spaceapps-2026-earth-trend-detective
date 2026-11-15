@@ -1,6 +1,6 @@
 # Working from the combined main branch
 
-Preparation has ended. Main contains the submitted local web UI and trend backend. The UI reads saved Swiss trend results; Norway/station views are currently CLI features. Missing data, requirements and predictions use labelled imaginary stand-ins; the dedicated risk/prediction modules remain unfinished.
+Preparation has ended. Main combines the trend backend with a local web interface for saved results. Swiss/Norwegian observations, GLDAS model comparisons and station heatmaps are available when their corresponding outputs have been built. Risk assessment and prediction remain unimplemented.
 
 ## Get a separate working folder
 
@@ -36,7 +36,16 @@ python -m pytest
 
 The backend tests use synthetic fixtures and fake API responses. See [the trend guide](mountain_water/trend/README.md) for dataset download/build/report commands and Earthdata authentication. Live service access and scientific interpretation are separate from these checks.
 
-The UI reads the saved CAMELS-CH tables in data/processed/trend. Without them it still runs with labelled imaginary data. Norway's NVE outputs, GLDAS comparisons and station heatmaps are available through the backend commands in its README; they are not wired into this UI handoff. Map tiles require internet, while Leaflet and display geometry are stored locally. Source and geometry limitations are in [the map guide](mountain_water/ui/map_component/README.md). Root ExecuteProgram.py and streamlit_app.py remain empty.
+The UI reads saved outputs under data/processed: trend (Swiss), trend_no (Norway), trend_gldas / trend_no_gldas (GLDAS), and trend_stations (station network). The source menu reports what actually exists, including build commands for missing outputs. Nothing downloads on page load. After running a backend build, click **Reload saved data**. See [the trend guide](mountain_water/trend/README.md) for credentials and build details; credentials never belong in Git.
+
+Plotly and Leaflet are served locally; there is no frontend build. Background map tiles require internet, but saved figures, tables, gauge points and cached river geometry work without them. River courses use actual OSM segments where a conservative match is available; unmatched gauges remain points. See [the map guide](mountain_water/ui/map_component/README.md). Root ExecuteProgram.py and streamlit_app.py remain empty.
+
+Focused UI checks (synthetic test fixtures, no downloads):
+
+```text
+python -m pytest tests/test_ui_backend.py tests/test_ui_server.py tests/test_ui_river_geometry.py
+```
+
 
 ## Local tooling and preserved work
 

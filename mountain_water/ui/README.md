@@ -1,91 +1,50 @@
 # RivaScope interface
 
-The screens of RivaScope: loading screen, occupation menu, map, and the river
-view with one shared graph, the risk assessment, statistics and physical
-models.
+A local results browser for the team's trend backend. One font family, compact controls, square panels, backend Plotly figures and inspectable tables. It reads saved outputs; opening or refreshing the page never downloads observations or runs a scientific build.
 
-It is a plain web page (HTML, CSS, JavaScript, no framework and no build
-step) served by a small Python server from the standard library. It does not
-use Streamlit or any hosted service, and nothing in it shows another
-product's branding.
-
-## Start it
-
-From the repository root, in the project's Python environment:
+## Start
 
 ```text
+python -m pip install -e ".[dev]"
 python -m mountain_water.ui
 ```
 
-RivaScope opens in its own window (Chrome or Edge without address bar; a
-normal browser tab if neither is installed). Closing the window stops the
-server. On Windows you can also double-click `RivaScope.cmd` in this folder.
+The launcher opens a Chrome/Edge app window, or a browser tab when no app-window browser exists. Closing that window stops its server. `--no-window` runs only the server; `--browser` opens a normal browser tab; `--port 8765` chooses a port (a nearby free port is used when occupied). Windows also has `RivaScope.cmd`.
 
-| Option | What it does |
+## Saved results
+
+| Source | Default saved directory | Meaning |
+| --- | --- | --- |
+| Swiss observations | data/processed/trend | CAMELS-CH catchment results |
+| Norwegian observations | data/processed/trend_no | NVE discharge with seNorge drivers |
+| Swiss GLDAS | data/processed/trend_gldas | Modelled environmental/runoff context |
+| Norwegian GLDAS | data/processed/trend_no_gldas | Modelled environmental/runoff context |
+| Station network | data/processed/trend_stations | Countries/stations actually included in that saved build |
+
+The source menu reports ready, missing or error from the files actually present. Missing sources show the corresponding backend command; follow the [trend guide](../trend/README.md) for credentials and prerequisites. Click **Reload saved data** after a build. No imaginary records substitute for missing products, stations, variables or model comparisons.
+
+Catchment views include time series, historical hydrographs, seasonal regimes, annual metrics, daily heatmaps, window means, correlations and driver scatters. Regional views expose trend/window-change heatmaps, maps, attribute comparisons, attribution and selection. Station views expose month/year heatmaps and driver changes. Source comparisons require both observed and GLDAS outputs and retain their model/observation distinction. Tables and figures come from the existing backend. Reference periods, hydrological/calendar years, units, missing values and significance conventions are retained from it; associations do not establish causation.
+
+The map shows gauge points and actual cached OpenStreetMap river segments where a conservative match exists. A missing course remains a point, with an explanation. Course geometry is display context, not a delineated upstream network or a calculation boundary. See [map sources and limits](map_component/README.md).
+
+## Incomplete sections
+
+Risk assessment, occupational requirements, forecasts and the team's physics model are not implemented. Their former fabricated values have been removed from the active UI. The optional **volatility surface demonstration** is explicitly synthetic, with arbitrary axes/values; it illustrates 3D interaction and does not use a station's results or estimate risk.
+
+## Files and API
+
+| File | Responsibility |
 | --- | --- |
-| `--browser` | open a normal browser tab instead of the app window |
-| `--no-window` | only start the server and print its address |
-| `--port 8765` | choose the port (a nearby free one is used if it is taken) |
+| app.py, __main__.py, RivaScope.cmd | Local launcher |
+| server.py | Static files and read-only JSON routes |
+| backend.py | Saved-result catalogue, allowlisted backend figures/tables, refresh |
+| river_geometry.py | Cached course lookup with match validation and attribution |
+| risk_view.py, prediction_view.py | Explicitly unfinished placeholders |
+| web/index.html, styles.css, js/ | Controls, map, figures and table presentation |
+| web/vendor/leaflet/ | Leaflet 1.9.4 and licence |
+| web/data/ | Display geometry with attribution |
+| map_component/ | Reproducible geometry tools and provenance |
 
-The map needs an internet connection for its satellite imagery. The small
-credits on the map (Esri imagery, OpenStreetMap river courses) are required by
-those sources.
+`GET /api/catalog` lists datasets, available options and views. `GET /api/figure` and `/api/table` accept allowlisted selection parameters. `GET /api/courses?dataset=ch` returns verified course segments and unmatched explanations. `POST /api/refresh` clears saved-result caches. `/vendor/plotly.min.js` serves the runtime from the installed Plotly package, keeping it compatible with the Python figures. No CDN or frontend build is required for charts. Map background tiles need internet; saved figures and cached geometry do not.
 
-## Where the numbers come from
-
-- **Measured rivers** come from the trend section (`mountain_water/trend`).
-  The interface reads its saved tables and calls its functions; it never
-  changes anything there. Prepare the data once with
-  `python -m mountain_water.trend download` and
-  `python -m mountain_water.trend build`. Without it the app still runs, on
-  imaginary data only, and says so under "About the data".
-- **Imaginary data** fills everything that has no real source yet, and is
-  marked "imaginary" wherever it appears (dotted lines in the graph):
-  - rivers without measurements: all of Norway and the large Swiss rivers;
-  - evaporation;
-  - the prediction for the year after the latest data;
-  - the physical model;
-  - every occupation's requirement, and the risk index and its scores.
-
-  All of it is made in `imaginary.py`. To retire one of them, replace the
-  call to `imaginary` in the file listed below.
-
-## Files
-
-| File | What it holds |
-| --- | --- |
-| `app.py`, `__main__.py` | starts the server and opens the window |
-| `server.py` | hands out the pages in `web/` and answers their requests as JSON |
-| `state.py` | the selection sent with each request (river, year, variables, ...) |
-| `controls.py` | what can be chosen: occupations with their requirement scenarios, variables, assessments, calculation methods |
-| `overview.py` | countries, rivers and data status for the menus and the map |
-| `data_source.py` | the bridge to the trend section, and the imaginary record for rivers without measurements |
-| `trend_view.py` | the shared graph and the statistics table |
-| `risk_view.py` | the occupation's risk assessment: flow against the requirement, long-term changes, volatility plane |
-| `prediction_view.py` | the prediction year and the physical-model section (imaginary for now) |
-| `imaginary.py` | all imaginary data |
-| `wording.py` | numbers as short plain text |
-| `web/index.html`, `web/styles.css` | the page and its look |
-| `web/js/main.js` | what is on screen and what happens on a click |
-| `web/js/chart.js` | the graph (hand-drawn SVG) and the year bars |
-| `web/js/plane.js` | the volatility plane |
-| `web/js/map.js` | the satellite map |
-| `web/vendor/leaflet/` | the Leaflet map library with its licence |
-| `web/data/geodata.json` | country outlines and the courses of the large rivers (see `map_component/`) |
-| `map_component/` | the tool that builds `geodata.json`, and the map's sources, licences and limits |
-
-## Things to know
-
-- The risk comparison in `risk_view.py` (days below the requirement,
-  shortfall periods, missing volume) is a stand-in. It belongs to
-  `mountain_water/risk_assessment`, which is still empty, and should move
-  there.
-- Occupation questions and "still needed" lists for hydropower, data centres
-  and government follow the project guide. Power plant and defence are not
-  specified there; their wording in `controls.py` is a proposal.
-- The year slider uses calendar years. The statistics use the trend
-  section's hydrological years (October to September); the table says so.
-- A missing value is shown as a gap and never as zero.
-- To add a variable, add it to `VARIABLES` in `controls.py` with the column
-  of the daily table that holds it. To add an occupation, add it to
-  `OCCUPATIONS`.
+Old bootstrap/rivers/outlines/view routes and their synthetic data generators have been retired. The original UI remains preserved on archive/ui-handoff-20261115.

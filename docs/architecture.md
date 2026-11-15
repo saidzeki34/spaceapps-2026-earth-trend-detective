@@ -2,7 +2,9 @@
 
 The application is organized around the team's four sections: **ui**, **trend**, **risk_assessment** (later), and **predictionmodel** (much later). The folder spelling risk_assessment corrects the typo in the discussion. A fifth, supporting shared folder holds common inputs, source access and coordination.
 
-The tables below record responsibilities agreed during the skeleton delivery. The submitted UI now uses a standard-library web server and web/ assets, replacing the former Streamlit charts/ files. It reads saved Swiss backend tables and uses labelled imaginary stand-ins. See [submitted-handoffs.md](submitted-handoffs.md), the [UI guide](../mountain_water/ui/README.md) and the [trend guide](../mountain_water/trend/README.md) for the actual file map and available features. Backend Norway/station features are not yet connected to the UI; dedicated risk, prediction and shared coordination modules remain unfinished. The historical tables are planning responsibilities, not a claim that every file still exists or is complete.
+The UI is a standard-library web server with HTML/CSS/JavaScript, not Streamlit. Its backend.py adapter reads saved trend outputs and calls trend.plots and table functions directly; river_geometry.py supplies cached verified course segments. See [the UI guide](../mountain_water/ui/README.md) for the current file map and [UI completion](ui-completion.md) for implementation boundaries. No scientific calculations are duplicated in the UI. Risk, prediction and shared coordination remain unfinished.
+
+The tables below preserve the original skeleton responsibilities, not a claim that every planned file exists or is complete.
 
 ## Folder overview
 
@@ -30,7 +32,7 @@ The root entry points remain empty. Launch the UI via python -m mountain_water.u
 
 ## ui — first phase
 
-Owns selection, navigation and presentation. It receives results through shared coordination; scientific calculations belong to their section.
+Owns selection, navigation and presentation. It currently receives results directly through ui/backend.py; the proposed shared coordination layer is still empty. Scientific calculations belong to their section.
 
 | Subsection | Placeholder files | Future responsibility |
 | --- | --- | --- |

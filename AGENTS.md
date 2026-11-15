@@ -1,9 +1,9 @@
 # Instructions for coding assistants
 
-## Current phase: competition has started; team integration
-On 2026-11-15 the user explicitly confirmed that preparation has ended. After delivery of the empty skeleton, teammates implemented their sections. The current instruction is to combine the available team work on main while preserving original branches and ongoing edits.
+## Current phase: competition has started; UI completion
+On 2026-11-15 the user explicitly confirmed that preparation had ended, then requested integration of the submitted team work. The latest task authorizes finishing the UI against Jonathan's existing trend backend: industrial styling, saved results, additional backend views, and actual river courses.
 
-This task combines existing work; it does not authorize finishing the application, inventing scientific methods, downloading solution data or deploying. The submitted local web UI reads saved Swiss trend results and uses labelled imaginary data for missing inputs and predictions. The backend also supports Norway and station comparisons, which are not yet exposed through the UI. Risk assessment, prediction and shared coordination remain incomplete; UI stand-ins do not complete those modules. Further implementation requires a separately agreed task.
+Keep scientific calculations in the existing trend backend. The UI must not fabricate missing observations, evaporation, requirements, risk scores or predictions. Missing saved datasets stay unavailable with their build commands. The only permitted synthetic display is an isolated, explicitly labelled 3D surface demonstration. Risk assessment, prediction and shared coordination remain unfinished. Do not deploy or download observation datasets as a side effect of opening the UI.
 
 Generated implementation was preserved separately on archive/generated-implementation at 165e09b. It is not part of the main skeleton or an approved implementation. Do not merge it wholesale or use it to fill placeholders without a new explicit task.
 

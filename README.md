@@ -2,7 +2,7 @@
 
 Shared project for the Oslo NASA Space Apps 2026 team, Earth System Trend Detective.
 
-Preparation has ended. Main combines Jonathan's Swiss/Norwegian trend backend and station comparisons with Claude's submitted RivaScope web UI. The UI reads saved Swiss CAMELS-CH results and uses clearly labelled imaginary data where inputs or models are missing. Norway and station comparisons are available through the backend CLI but are not yet connected to the UI. See the [submitted handoffs](docs/submitted-handoffs.md) for preserved branches and limitations.
+Preparation has ended. RivaScope presents Jonathan's saved Swiss/Norwegian trend results, GLDAS model comparisons and station-network views through a local web interface. It uses the backend's figures and tables directly. Missing saved outputs show their status and build commands; no observations or forecasts are invented. See the [UI completion handoff](docs/ui-completion.md) and [preserved submissions](docs/submitted-handoffs.md).
 
 The project direction is to investigate mountain-catchment water availability in Norway and Switzerland using river observations and relevant NASA environmental data, with historical context and clearly stated user requirements. Sources, scientific methods and the team's physics model require team decisions and implementation.
 
@@ -41,7 +41,7 @@ python -m mountain_water.trend --help
 python -m pytest
 ```
 
-ExecuteProgram.py and streamlit_app.py remain empty; use the module command above. Streamlit is no longer used. See [SETUP.md](SETUP.md), the [UI guide](mountain_water/ui/README.md) and [the trend guide](mountain_water/trend/README.md). The UI's risk, requirements and predictions include imaginary stand-ins; the dedicated risk and physics-model modules remain unfinished.
+ExecuteProgram.py and streamlit_app.py remain empty; use the module command above. Streamlit is no longer used. See [SETUP.md](SETUP.md), the [UI guide](mountain_water/ui/README.md) and [the trend guide](mountain_water/trend/README.md). Risk assessment and the physics/prediction model remain unimplemented. A separate, labelled synthetic surface demonstrates 3D interaction only.
 
 Earlier generated implementation is preserved on [archive/generated-implementation](https://github.com/saidzeki34/spaceapps-2026-earth-trend-detective/tree/archive/generated-implementation), commit 165e09b. It was never merged into main. It is an archive, not the accepted foundation; do not merge it wholesale.
 
