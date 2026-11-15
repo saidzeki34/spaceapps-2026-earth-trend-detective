@@ -54,8 +54,9 @@ STATION_FIELDS = {
     "glacier": ("percentGlacier",),
     "lake": ("percentEffLake", "percentLake"),
 }
-# Regulation: NVE's category ``catchmentRegTypeName`` decides ("uregulert" = unregulated, anything
-# containing "regulert" = regulated, e.g. "regulert m/magasinregulering"). Only when it is empty do the
+# Regulation: NVE's category ``catchmentRegTypeName`` decides (starts with "uregulert" = unregulated;
+# anything else containing "regulert" = regulated, e.g. "regulert m/magasinregulering" or
+# "regulert m/magasin og uregulert restfelt"). Only when it is empty do the
 # numeric fields count: any of these > 0 marks a station as regulated.
 REGULATION_TYPE_FIELD = "catchmentRegTypeName"
 REGULATION_FIELDS = (
@@ -193,7 +194,8 @@ def station_attributes(stations: list[dict]) -> pd.DataFrame:
 
 def _regulated(rec: dict) -> tuple[int, str]:
     reg_type = str(rec.get(REGULATION_TYPE_FIELD) or "").strip().lower()
-    if "uregul" in reg_type:
+    # Must start with "uregulert": "regulert m/magasin og uregulert restfelt" is regulated.
+    if reg_type.startswith("uregul"):
         return 0, reg_type
     if "regul" in reg_type:
         return 1, reg_type
@@ -225,10 +227,14 @@ def candidate_stations(attrs: pd.DataFrame, min_elevation: float | None, max_are
 def station_key(value, area_no=None) -> tuple[int, int] | None:
     """(watercourse area, station) from any id form: "2.11.0", "2.11", "002.00011.000" -> (2, 11).
 
-    A lone station number is combined with the watercourse area number when one is given.
+    A 12-digit compound key ("007600005000" = area 0076, station 00005, version 000) is split; a lone
+    station number is combined with the watercourse area number when one is given.
     """
     if value is None:
         return None
+    text = str(value).strip()
+    if re.fullmatch(r"\d{12}", text):
+        return int(text[:4]), int(text[4:9])
     ints = [int(x) for x in re.findall(r"\d+", str(value))]
     if len(ints) >= 2:
         return ints[0], ints[1]

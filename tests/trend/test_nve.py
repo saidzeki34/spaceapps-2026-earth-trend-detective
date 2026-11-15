@@ -109,11 +109,13 @@ def test_regulation_category_wins():
     unreg = nve._regulated({"catchmentRegTypeName": "uregulert", "numberReservoirs": 2})
     fallback = nve._regulated({"catchmentRegTypeName": "", "numberReservoirs": 2})
     none = nve._regulated({"regulationArea": 0})
-    assert [reg[0], unreg[0], fallback[0], none[0]] == [1, 0, 1, 0]
+    residual = nve._regulated({"catchmentRegTypeName": "regulert m/magasin og uregulert restfelt"})
+    assert [reg[0], unreg[0], fallback[0], none[0], residual[0]] == [1, 0, 1, 0, 1]
 
 
 @pytest.mark.parametrize("value,area,key", [
     ("2.11.0", None, (2, 11)), ("2.11", None, (2, 11)), ("002.00011.000", None, (2, 11)), ("11", "2", (2, 11)),
+    ("76.5.0", None, (76, 5)), ("007600005000", "076", (76, 5)),
     ("", None, None)])
 def test_station_key(value, area, key):
     assert nve.station_key(value, area) == key
