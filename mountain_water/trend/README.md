@@ -7,9 +7,9 @@ This folder downloads CAMELS-CH, parses the **observed daily series**, selects m
 ```text
 uv pip install -e ".[dev]"                     # or: pip install -e ".[dev]"
 python -m mountain_water.trend download        # Zenodo -> data/raw/camels_ch/v<version>/ (md5-checked, ~250 MB)
-python -m mountain_water.trend inspect         # check real columns against the assumptions below
+python -m mountain_water.trend inspect         # list files, columns and units of the download
 python -m mountain_water.trend build           # -> data/processed/trend/*.parquet
-python -m mountain_water.trend report --gauge <id>   # -> data/exports/trend/*.html + *.csv
+python -m mountain_water.trend report --gauge 2268 --gauge 2327   # -> data/exports/trend/*.html + *.csv
 python -m pytest                               # synthetic CAMELS-CH-shaped fixture
 ```
 
@@ -39,14 +39,26 @@ plots.regime_by_window(r, r.gauges[0])     # plotly Figure
 
 The 10-year windows start at the first valid hydrological year, 1982 (Oct 1981–Sep 1982), because the record starts in January 1981. That gives 1982–1991, 1992–2001, 2002–2011 and 2012–2020. A final window shorter than 8 years is dropped. Use `--hydro-year-start 1` to get calendar-year decades (1981–1990, ...).
 
-## Assumptions to verify on the real download
+## Verified on the real data
 
-The code was developed **without access to the real files**. It was tested only on a synthetic dataset with the documented CAMELS-CH layout (`tests/trend/conftest.py`). After `download`, run `inspect` and check:
+The full pipeline (`download`, `inspect`, `build`, `report`) has been run on **CAMELS-CH v0.9** (Zenodo). It found 331 observed series from 1981-01-01 to 2020-12-31 and every expected header and attribute column. The default filters keep 33 catchments:
 
-- observed files and header names: `discharge_vol(m3/s)`, `discharge_spec(mm/d)`, `precipitation(mm/d)`, `temperature_mean(degC)`, `swe(mm)`, `rel_sun_dur(%)`
-- attribute names used by the filter and labels: `elev_mean`, `area`, `num_reservoir` (any of the candidates in `settings.py`), `gauge_name`, `gauge_lat`, `gauge_lon`
+| Step | Remaining |
+| --- | --- |
+| All catchments | 331 |
+| Mean elevation ≥ 1500 m (`elev_mean`) | 121 |
+| Area ≤ 500 km² (`area`) | 71 |
+| No reservoirs (`num_reservoir`) | 53 |
+| ≥ 30 years with ≥ 90 % valid flow | 33 |
 
-If a filter column is missing, the build log shows `SKIPPED` for that step. Add the real name to the candidates in `settings.py`.
+Good gauges to start with: 2268 (Rhone at Gletsch, glacier-fed), 2327 (Dischmabach, snow-dominated) and 2605 (Verzasca, south of the Alps).
+
+Data notes:
+- SWE is missing for about 44 % of catchment-years, so snow metrics cover fewer years than the flow metrics.
+- One selected catchment has no temperature series.
+- Some catchments still have hydropower plants (`hp_count` > 0), and 2347 is named a compensation basin. Check them before interpreting their trends.
+
+The automated tests (`python -m pytest`) use a small synthetic dataset with the same layout (`tests/trend/conftest.py`), so they run without the download.
 
 ## Interpretation limits
 
