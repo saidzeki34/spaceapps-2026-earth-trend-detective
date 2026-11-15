@@ -1,0 +1,275 @@
+// RivaScope front end. Map-first navigation over the team's saved trend results.
+// Every number and figure comes from /api (mountain_water.ui.backend, which calls the trend
+// section). Nothing is generated here: no observations, forecasts, thresholds or scores.
+import { createMap } from './map.js';
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const STORE = 'rivascope-v4';
+const PAGE_SIZE = 40;
+const FONT = "Bahnschrift, 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif";
+const INK = '#0a0a0a', MID = '#6f6f6b', GRID = '#e3e3df', ORANGE = '#ff4f00';
+
+// Risk assessment: three headline trends, then the saved yearly indicators the chosen occupation
+// reads first (rows of the backend's trend table). Only a selection of saved rows: no requirement,
+// threshold or score is attached to an occupation.
+const HEADLINE = [['Quantity', 'volume_hm3'], ['Timing', 'half_volume_doy'], ['Variability', 'cv_daily']];
+const OCCUPATIONS = [
+  { id: 'hydropower', label: 'Hydropower', metrics: ['volume_hm3', 'winter_mean_flow', 'summer_mean_flow', 'half_volume_doy', 'cv_daily'] },
+  { id: 'data_center', label: 'Data center infrastructure', metrics: ['min7_flow', 'q95_low', 'days_below_q347', 'low_flow_doy', 'temp_summer'] },
+  { id: 'power_plant', label: 'Power plant', metrics: ['summer_mean_flow', 'min7_flow', 'q95_low', 'days_below_q347', 'temp_summer'] },
+  { id: 'government', label: 'Government official', metrics: ['volume_hm3', 'days_below_q347', 'half_volume_doy', 'precip_total_mm', 'swe_max_mm'] },
+  { id: 'defence', label: 'Defence', metrics: ['min7_flow', 'days_below_q347', 'peak_flow', 'q10_high', 'flashiness'] },
+];
+const OCCUPATION_KEY = 'rivascope-occupation';   // the choice made on the first screen, kept between sessions
+
+// Assessments (left box). Each ticked one adds its blocks under the shared graph.
+const SECTIONS = [
+  { id: 'risk', label: 'Risk assessment', blocks: [{ id: 'headline', kind: 'headline' }, { view: 'flow_surface' }] },
+  { id: 'statistics', label: 'Statistics', blocks: [{ view: 'annual_metric' }, { view: 'window_means' }] },
+  { id: 'regime', label: 'Seasonal regime', blocks: [{ view: 'hydrograph_vs_history' }, { view: 'regime_by_window' }, { view: 'daily_heatmap' }] },
+  { id: 'drivers', label: 'Drivers', blocks: [{ view: 'correlation_matrix' }, { view: 'driver_scatter' }] },
+];
+const REGION_VIEWS = ['trend_heatmap', 'window_change_heatmap', 'trend_vs_attribute', 'attribution_bars', 'selection_summary'];
+const STATION_VIEWS = ['station_month_heatmap', 'station_year_heatmaps', 'driver_change_scatter'];
+const TITLES = {
+  timeseries: 'Time series', hydrograph_vs_history: 'Year against history', regime_by_window: 'Regime by 10-year window',
+  annual_metric: 'Annual metric and trend', daily_heatmap: 'Daily flow, all years', window_means: '10-year window means',
+  correlation_matrix: 'Driver correlations', driver_scatter: 'Flow against driver', flow_surface: 'Flow surface',
+  trend_heatmap: 'Trends', window_change_heatmap: 'Window change', trend_vs_attribute: 'Trend / attribute',
+  attribution_bars: 'Attribution', selection_summary: 'Selection',
+  station_month_heatmap: 'Stations / month', station_year_heatmaps: 'Stations / year', driver_change_scatter: 'Station drivers',
+};
+const HEIGHT = { timeseries: 390, hydrograph_vs_history: 360, regime_by_window: 360, annual_metric: 340, window_means: 320,
+  daily_heatmap: 440, correlation_matrix: 460, driver_scatter: 360, trend_vs_attribute: 400, attribution_bars: 420, selection_summary: 320 };
+// Figures that cannot be squeezed: below this width their box scrolls sideways instead.
+const MIN_WIDTH = { station_month_heatmap: 1400, station_year_heatmaps: 1400, trend_heatmap: 720, window_change_heatmap: 720, correlation_matrix: 560 };
+const SERIES = {
+  discharge_vol: INK, discharge_spec: '#00875a', waterlevel: '#7b7b77', runoff_surface: '#3f8f6f', runoff_base: '#8fb9a6',
+  temperature_mean: ORANGE, temperature_min: '#ff9d70', temperature_max: '#b73800', precipitation: '#1f6fe0',
+  swe: '#22b3c7', rel_sun_dur: '#c9a100', evap: '#9c5a00', snowmelt: '#5fc7d6', snowfall: '#8aa6c9',
+};
+const WATER = new Set(['discharge_vol', 'discharge_spec', 'waterlevel', 'runoff_surface', 'runoff_base']);
+
+const state = {
+  occupation: null, country: null, river: null, dataset: 'ch', year: null, interval: 'monthly',
+  variables: ['temperature_mean', 'discharge_vol'], sections: ['risk', 'statistics'], opts: {}, region: null, expanded: false,
+};
+let catalog, geodata, map, courseRequest = 0, yearTimer = null, resizeTimer = null, fullId = null;
+const courseCache = new Map();
+const live = new Map(); // block id -> block currently on screen
+
+// ---------------------------------------------------------------- helpers
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const unit = text => String(text || '').replace('m3/s', 'm³/s').replace('degC', '°C').replace('km2', 'km²').replace(/^-$/, '');
+const splitLabel = label => { const m = /^(.*?)\s*\[(.*)\]\s*$/.exec(String(label)); return m ? [m[1], unit(m[2])] : [String(label), '']; };
+const finite = value => value != null && Number.isFinite(Number(value));
+const digits = (value, places = 1) => Number(value).toLocaleString('en-GB', { minimumFractionDigits: places, maximumFractionDigits: places });
+const significant = value => finite(value) ? Number(value).toLocaleString('en-GB', { maximumSignificantDigits: 3 }) : '—';
+const signed = (value, places = 1) => !finite(value) ? '—' : (value > 0 ? '+' : value < 0 ? '−' : '') + digits(Math.abs(value), places);
+const pValue = p => !finite(p) ? '—' : p < 0.001 ? '<0.001' : Number(p).toFixed(3);
+const ds = (id = state.dataset) => catalog?.datasets.find(d => d.id === id);
+const spec = (view, id = state.dataset) => ds(id)?.views.find(v => v.id === view);
+const gauge = () => ds()?.gauges.find(g => String(g.id) === String(state.river));
+const countryName = code => geodata.countries[code]?.name || code;
+const riverName = g => g?.river || g?.name || g?.id || '';
+const occupation = () => OCCUPATIONS.find(o => o.id === state.occupation) || OCCUPATIONS[0];
+const metricInfo = id => { const m = ds()?.metrics?.find(x => x.id === id); const [name, u] = splitLabel(m?.label || id); return { name, unit: u }; };
+const variableName = id => splitLabel((spec('timeseries')?.options.find(o => o.name === 'variable')?.values || []).find(v => String(v.id) === id)?.label || id)[0];
+const period = d => d?.years?.length ? `${d.years[0]}–${d.years.at(-1)}` : '';
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || payload.message || `Request failed (${response.status}).`);
+  return payload;
+}
+
+// ---------------------------------------------------------------- state
+function recall() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE));
+    if (saved && typeof saved === 'object') {
+      if (typeof saved.interval === 'string') state.interval = saved.interval;
+      for (const key of ['variables', 'sections']) if (Array.isArray(saved[key])) state[key] = saved[key].map(String);
+      if (saved.opts && typeof saved.opts === 'object') state.opts = saved.opts;
+    }
+    state.occupation = localStorage.getItem(OCCUPATION_KEY);
+  } catch { /* Storage is optional. */ }
+  const link = new URLSearchParams(location.hash.slice(1));
+  state.occupation = link.get('o') || state.occupation;
+  if (!OCCUPATIONS.some(o => o.id === state.occupation)) state.occupation = null;
+  state.country = link.get('c');
+  state.river = link.get('r');
+  if (link.get('d')) state.dataset = link.get('d'); else if (state.country) state.dataset = state.country.toLowerCase();
+  if (link.has('y')) state.year = link.get('y');
+  if (link.has('m')) state.interval = link.get('m');
+  if (link.has('v')) state.variables = link.get('v').split(',').filter(Boolean);
+  if (link.has('s')) state.sections = link.get('s').split(',').filter(Boolean);
+  if (link.has('g')) state.region = link.get('g');
+  state.expanded = link.get('x') === '1';
+  for (const key of ['metric', 'driver', 'attribute', 'kind', 'normalized', 'log_scale', 'pair']) if (link.has(key)) state.opts[key] = link.get(key);
+  if (state.river?.startsWith('ch-')) state.river = state.river.slice(3); // links from the first version
+}
+
+function remember() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({ interval: state.interval, variables: state.variables, sections: state.sections, opts: state.opts }));
+  } catch { /* Storage is optional. */ }
+  const entries = { o: state.occupation, c: state.country, r: state.river, d: state.dataset, y: state.river ? state.year : '',
+    m: state.interval, v: state.variables.join(','), s: state.sections.join(','), g: state.river ? '' : state.region,
+    x: state.expanded ? '1' : '', ...state.opts };
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(entries)) if (value != null && value !== '') params.set(key, String(value));
+  history.replaceState(null, '', `#${params}`);
+}
+
+function optionValues(name) {
+  for (const id of [state.dataset, 'stations']) for (const view of ds(id)?.views || []) {
+    const option = view.options.find(o => o.name === name);
+    if (option) return option.values.map(v => String(v.id));
+  }
+  return [];
+}
+
+function normalize() {
+  if (!geodata.countries[state.country]) state.country = null;
+  if (!state.country) { state.river = null; state.expanded = false; return; }
+  const own = catalog.datasets.filter(d => d.country === state.country);
+  if (!own.some(d => d.id === state.dataset)) state.dataset = state.country.toLowerCase();
+  if (state.river && !gauge()) state.river = null;
+  const years = ds()?.years || [];
+  if (!years.includes(Number(state.year))) state.year = years.at(-1) ?? null;
+  const variables = optionValues('variable');
+  state.variables = variables.filter(v => state.variables.includes(v)).slice(0, 4);   // always in the backend's order
+  if (!state.variables.length) state.variables = variables.filter(v => ['temperature_mean', 'discharge_vol'].includes(v));
+  if (!state.variables.length) state.variables = variables.slice(0, 1);
+  if (!['monthly', 'daily'].includes(state.interval)) state.interval = 'monthly';
+  state.sections = state.sections.filter(id => SECTIONS.some(s => s.id === id));
+  const preferred = { metric: 'volume_hm3', driver: 'precip_total_mm', attribute: 'elevation', kind: 'volume', normalized: 'false', log_scale: 'true', pair: 'snow' };
+  for (const name of Object.keys(preferred)) {
+    const values = optionValues(name);
+    if (!values.length) { delete state.opts[name]; continue; }
+    if (!values.includes(String(state.opts[name]))) state.opts[name] = values.includes(preferred[name]) ? preferred[name] : values[0];
+  }
+  const tabs = regionTabs();
+  if (!tabs.some(t => t.view === state.region)) state.region = tabs[0]?.view || null;
+  if (!state.river && !tabs.length) state.expanded = false;
+}
+
+// The country-level analyses: comparisons across the saved catchments, and the station network.
+function regionTabs() {
+  const tabs = [];
+  if (ds()?.status === 'ready') for (const view of REGION_VIEWS) if (spec(view)) tabs.push({ view, dataset: state.dataset });
+  const network = ds('stations');
+  if (ds()?.kind === 'observed' && network?.status === 'ready' && network.gauges.some(g => g.country === state.country)) {
+    for (const view of STATION_VIEWS) if (spec(view, 'stations')) tabs.push({ view, dataset: 'stations' });
+  }
+  return tabs;
+}
+
+function params(block) {
+  const id = block.dataset || state.dataset;
+  const query = new URLSearchParams({ dataset: id, view: block.view });
+  if (id !== 'stations' && state.river) query.set('gauge', state.river);
+  for (const option of spec(block.view, id)?.options || []) {
+    const value = option.name === 'year' ? state.year : option.name === 'variable' ? state.variables.join(',')
+      : option.name === 'interval' ? state.interval : state.opts[option.name];
+    if (value != null) query.set(option.name, value);
+  }
+  return query;
+}
+
+// ---------------------------------------------------------------- start
+async function start() {
+  const began = performance.now();
+  try {
+    [catalog, geodata] = await Promise.all([api('/api/catalog'), api('data/geodata.json')]);
+  } catch (error) {
+    $('#splash-status').innerHTML = `Could not start. ${esc(error.message)} <button data-action="retry">Retry</button>`;
+    return;
+  }
+  recall();
+  $('#about-body').innerHTML = aboutHTML();
+  $('#choices').innerHTML = OCCUPATIONS.map((o, i) => `<li><button data-occupation="${o.id}"><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="name">${esc(o.label)}</span><span class="ind">${o.metrics.map(m => esc(metricInfo(m).name)).join(' · ')}</span></button></li>`).join('');
+  $('#occupation-select').innerHTML = OCCUPATIONS.map(o => `<option value="${o.id}">${esc(o.label)}</option>`).join('');
+  $('#pick-data').textContent = catalog.datasets.filter(d => d.kind === 'observed').map(d => `${d.label}: ${d.status === 'ready' ? `${d.count} rivers, ${period(d)}` : 'not built'}`).join('  ·  ');
+  // A link to a place opens the app directly; the occupation can be set in the bar above.
+  const linked = location.hash.length > 1;
+  if (!state.occupation && linked) state.occupation = OCCUPATIONS[0].id;
+  // The loading screen stays long enough to be seen. The occupation menu follows it the first
+  // time; afterwards the saved choice is used and the map opens directly.
+  setTimeout(() => {
+    $('#splash')?.remove();
+    if (state.occupation) openApp(); else $('#occupation').hidden = false;
+  }, linked ? 0 : Math.max(0, 1200 - (performance.now() - began)));
+}
+
+function chooseOccupation(id) {
+  if (!OCCUPATIONS.some(o => o.id === id)) return;
+  state.occupation = id;
+  try { localStorage.setItem(OCCUPATION_KEY, id); } catch { /* Storage is optional. */ }
+}
+
+function aboutHTML() {
+  const row = d => `<tr><td>${esc(d.label)}</td><td class="${d.status === 'ready' ? 'ok' : 'na'}">${d.status === 'ready' ? 'Ready' : d.status === 'error' ? 'Unreadable' : 'Not built'}</td><td>${d.status === 'ready' ? `${d.count} gauges${period(d) ? ` · ${period(d)}` : ''}` : `<code>${esc(d.build_command)}</code>`}</td></tr>`;
+  return `<table><thead><tr><th>Saved results</th><th>State</th><th>Content / build command</th></tr></thead><tbody>${catalog.datasets.map(row).join('')}</tbody></table>
+    <p>Saved results of the trend section are read from this computer. Nothing is downloaded or built here. Missing observations stay missing. The trend section interpolates gaps of up to 5 days before computing its yearly statistics and flags those days; the time series and the flow surface leave them out. GLDAS is model output, not measured discharge. Trends are statistical associations, not causes. No forecast model is connected.</p>
+    <p>Imagery and names: Esri. Country outlines: Natural Earth. River segments: © OpenStreetMap contributors.</p>
+    <button data-action="refresh">Reload saved results</button>`;
+}
+
+function openApp() {
+  $('#occupation').hidden = true;
+  $('#app').hidden = false;
+  $('#occupation-select').value = occupation().id;
+  if (!map) map = createMap($('#map'), geodata, {
+    country: code => go({ country: code, river: null, dataset: code.toLowerCase() }),
+    river: id => go({ river: String(id) }),
+    europe: () => go({ country: null, river: null }),
+  });
+  render();
+}
+
+function go(changes) {
+  clearTimeout(yearTimer);
+  if ('river' in changes && !changes.river) state.expanded = false;
+  Object.assign(state, changes);
+  render();
+}
+
+function render() {
+  normalize();
+  const hasResults = Boolean(state.river) || (Boolean(state.country) && regionTabs().length > 0);
+  const layout = $('#layout');
+  layout.classList.toggle('has-results', hasResults);
+  layout.classList.toggle('has-time', Boolean(state.river));
+  layout.classList.toggle('expanded', hasResults && state.expanded);
+  renderCrumbs(); renderSide(); renderTimeline(); renderResults(); updateMap(); remember();
+}
+
+function renderCrumbs() {
+  const parts = [state.country ? '<button data-action="europe">Europe</button>' : '<b>Europe</b>'];
+  if (state.country) parts.push(state.river ? `<button data-action="rivers">${esc(countryName(state.country))}</button>` : `<b>${esc(countryName(state.country))}</b>`);
+  if (state.river) parts.push(`<b>${esc(riverName(gauge()))}</b>`);
+  $('#crumbs').innerHTML = parts.join('<i>/</i>');
+}
+
+// ---------------------------------------------------------------- left box
+function checkHTML(kind, id, label, on, color, note = '') {
+  return `<label class="check"${color ? ` style="--c:${color}"` : ''}><input type="checkbox" data-${kind}="${esc(id)}" ${on ? 'checked' : ''}><i></i><span>${esc(label)}</span><em>${esc(note)}</em></label>`;
+}
+
+function renderSide() {
+  const side = $('#side'), data = ds();
+  if (!state.country) {
+    side.innerHTML = `<div class="side-head"><small>Region</small><h2>Europe</h2></div><ul class="rows">${Object.entries(geodata.countries).map(([code, country]) => {
+      const saved = ds(code.toLowerCase());
+      return `<li><button data-country="${code}"><b>${esc(country.name)}</b><span>${saved?.status === 'ready' ? `${saved.count} rivers · ${period(saved)}` : 'Not built'}</span></button></li>`;
+    }).join('')}</ul>`;
+    return;
+  }
+  const sources = catalog.datasets.filter(d => d.country === state.country);
+  const sourceHTML = sources.some(d => d.status === 'ready' && d.id !== state.dataset)
+    ? `<label class="pickbox">Source<select id="dataset">${sources.map(d => `<option value="${d.id}" ${d.id === state.dataset ? 'selected' : ''} ${d.status === 'ready' ? '' : 'disabled'}>${esc(d.label)}</option>`).join('')}</select></label>` : '';
+  const river = gauge();

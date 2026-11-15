@@ -1,0 +1,251 @@
+  if (!river) {
+    const head = `<div class="side-head"><button class="back" data-action="europe">← Europe</button><h2>${esc(countryName(state.country))}</h2>`;
+    if (data?.status !== 'ready') {
+      side.innerHTML = `${head}<small>${esc(data?.label || '')}</small></div>${sourceHTML}<div class="na-box"><b>${data?.status === 'error' ? 'Unreadable' : 'Not built'}</b><code>${esc(data?.build_command || '')}</code></div>`;
+      return;
+    }
+    side.innerHTML = `${head}<small>${esc(data.label)} · ${data.count} rivers · ${period(data)}</small></div>${sourceHTML}
+      <input class="filter" id="filter" type="search" placeholder="Filter" aria-label="Filter rivers">
+      <ul class="rows" id="river-list">${data.gauges.map(g => `<li><button data-river="${esc(g.id)}"><b>${esc(riverName(g))}</b><span>${esc(g.place || g.name)} · ${esc(g.id)}</span>${finite(g.elevation_m) ? `<em>${Math.round(g.elevation_m)} m</em>` : ''}</button></li>`).join('')}</ul>`;
+    return;
+  }
+  const facts = [river.place || river.name, river.id, finite(river.elevation_m) && `${Math.round(river.elevation_m)} m`, finite(river.area_km2) && `${significant(river.area_km2)} km²`].filter(Boolean);
+  const variables = spec('timeseries')?.options.find(o => o.name === 'variable')?.values || [];
+  const group = water => variables.filter(v => WATER.has(v.id) === water).map(v => {
+    const [name, u] = splitLabel(v.label);
+    return checkHTML('variable', v.id, name, state.variables.includes(String(v.id)), SERIES[v.id] || MID, u);
+  }).join('');
+  side.innerHTML = `<div class="side-head"><button class="back" data-action="rivers">← ${esc(countryName(state.country))}</button><h2>${esc(riverName(river))}</h2><small>${esc(facts.join(' · '))}</small></div>${sourceHTML}
+    <fieldset class="grp"><legend><i>01</i>Reference</legend>${group(false)}</fieldset>
+    <fieldset class="grp"><legend><i>02</i>Water availability</legend>${group(true)}</fieldset>
+    <fieldset class="grp"><legend><i>03</i>Assessment</legend>${SECTIONS.map(s => checkHTML('section', s.id, s.label, state.sections.includes(s.id), '')).join('')}</fieldset>
+    <fieldset class="grp"><legend><i>04</i>Calculation</legend><div class="seg">${[['monthly', 'Monthly avg.'], ['daily', 'Daily']].map(([id, label]) => `<button data-interval="${id}" class="${state.interval === id ? 'on' : ''}">${label}</button>`).join('')}</div></fieldset>`;
+}
+
+// ---------------------------------------------------------------- map
+async function updateMap() {
+  if (!map) return;
+  const ticket = ++courseRequest;
+  const grouped = { CH: [], NO: [] };
+  const sources = state.country ? [ds()] : catalog.datasets.filter(d => d.kind === 'observed');
+  for (const source of sources) for (const g of source?.gauges || []) {
+    const region = source.country || g.country;
+    if (grouped[region]) grouped[region].push({ ...g, id: String(g.id), name: riverName(g), place: g.place || g.name });
+  }
+  map.setRivers(grouped);
+  map.show({ country: state.country, river: state.river });
+  try {
+    const answers = await Promise.all(sources.filter(Boolean).map(async source => {
+      if (!courseCache.has(source.id)) courseCache.set(source.id, await api(`/api/courses?dataset=${encodeURIComponent(source.id)}`));
+      return courseCache.get(source.id);
+    }));
+    if (ticket === courseRequest) map.setCourses({ type: 'FeatureCollection', features: answers.flatMap(a => a.features || []) });
+  } catch { /* Gauge points stay usable without river lines. */ }
+}
+
+// ---------------------------------------------------------------- timeline
+function renderTimeline() {
+  const years = ds()?.years || [], element = $('#timeline');
+  if (!state.river || !years.length) { element.innerHTML = ''; return; }
+  const first = years[0], last = years.at(-1);
+  element.innerHTML = `<div class="tl"><div class="yr"><small><span class="long">Hydrological year</span><span class="short">Hydr. year</span></small><b id="yr">${esc(state.year)}</b></div>
+    <div class="track" id="track" tabindex="0" role="slider" aria-label="Hydrological year" aria-valuemin="${first}" aria-valuemax="${last}" aria-valuenow="${esc(state.year)}">
+      ${years.map(y => `<i class="y${y % 5 === 0 ? ' major' : ''}${y === Number(state.year) ? ' on' : ''}" data-y="${y}">${y % 10 === 0 ? `<span class="${y % 20 === 0 ? 'd20' : ''}">${y}</span>` : ''}</i>`).join('')}
+    </div>
+    <div class="fc" title="No forecast model is connected"><b>${last + 1}</b><small>Forecast<br>no model</small></div></div>`;
+}
+
+function setYear(year) {
+  if (!finite(year) || Number(year) === Number(state.year)) return;
+  state.year = Number(year);
+  $('#yr').textContent = state.year;
+  $('#track').setAttribute('aria-valuenow', state.year);
+  for (const cell of $$('#track .y')) cell.classList.toggle('on', Number(cell.dataset.y) === state.year);
+  clearTimeout(yearTimer);
+  yearTimer = setTimeout(() => { reload(b => usesOption(b, 'year')); remember(); }, 140);
+}
+
+function yearAt(clientX) {
+  const cells = $$('#track .y');
+  if (!cells.length) return null;
+  const left = cells[0].getBoundingClientRect().left, right = cells.at(-1).getBoundingClientRect().right;
+  const index = Math.max(0, Math.min(cells.length - 1, Math.floor((clientX - left) / (right - left) * cells.length)));
+  return Number(cells[index].dataset.y);
+}
+
+// ---------------------------------------------------------------- results
+const usesOption = (block, name) => Boolean(block.view) && (spec(block.view, block.dataset || state.dataset)?.options || []).some(o => o.name === name);
+
+function blockHTML(block, number) {
+  const options = (spec(block.view, block.dataset || state.dataset)?.options || []).filter(o => !['year', 'variable', 'interval'].includes(o.name));
+  const selects = options.map(o => `<select data-opt="${esc(o.name)}" aria-label="${esc(o.label)}">${o.values.map(v => `<option value="${esc(v.id)}" ${String(v.id) === String(state.opts[o.name]) ? 'selected' : ''}>${esc(splitLabel(v.label)[0])}</option>`).join('')}</select>`).join('');
+  const actions = block.kind ? '' : '<button data-act="table">Table</button><button data-act="csv">CSV</button><button data-act="full">Full</button>';
+  return `<section class="fig" id="fig-${block.id}" data-block="${block.id}">
+    <header><span class="no">${String(number).padStart(2, '0')}</span><h3>${esc(block.title)}</h3><span class="opts">${selects}</span><span class="acts">${actions}</span></header>
+    <p class="cap" hidden></p><p class="msg">Loading</p><div class="scroll"><div class="plot" hidden></div></div><div class="tbl" hidden></div></section>`;
+}
+
+function renderResults() {
+  for (const block of live.values()) block.controller?.abort();
+  live.clear(); fullId = null;
+  const element = $('#results'), data = ds(), river = gauge();
+  let blocks = [], head = '';
+  if (river) {
+    blocks = [{ id: 'timeseries', view: 'timeseries', title: TITLES.timeseries }];
+    for (const section of SECTIONS) if (state.sections.includes(section.id)) {
+      for (const b of section.blocks) blocks.push({ ...b, id: b.id || b.view, section: section.id, title: b.kind === 'headline' ? `Risk assessment · ${occupation().label}` : TITLES[b.view] });
+    }
+    blocks = blocks.filter(b => b.kind || spec(b.view));
+    const facts = [river.place || river.name, `No. ${river.id}`, finite(river.elevation_m) && `${Math.round(river.elevation_m)} m`, finite(river.area_km2) && `${significant(river.area_km2)} km²`].filter(Boolean);
+    head = `<header class="res-head"><div><h2>${esc(riverName(river))}</h2><p>${esc(facts.join(' · '))}</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button></div></header>`;
+  } else if (state.country && regionTabs().length) {
+    const tabs = regionTabs(), current = tabs.find(t => t.view === state.region) || tabs[0];
+    blocks = [{ id: current.view, view: current.view, dataset: current.dataset, title: TITLES[current.view] }];
+    head = `<header class="res-head"><div><h2>${esc(countryName(state.country))}</h2><p>${data.count} rivers compared</p></div><div class="res-side"><p>${esc(data.label)}<br>${period(data)}</p><button data-action="expand">${state.expanded ? 'Map' : 'Expand'}</button></div></header>
+      <nav class="tabs">${tabs.map(t => `<button data-region="${t.view}" class="${t.view === current.view ? 'on' : ''}">${esc(TITLES[t.view])}</button>`).join('')}</nav>`;
+  } else { element.innerHTML = ''; return; }
+  element.innerHTML = `${head}${blocks.map((b, i) => blockHTML(b, i + 1)).join('')}<p class="foot">Sen's slope per decade · Mann-Kendall test · FDR per metric. Statistical association, not cause.</p>`;
+  element.scrollTop = 0;
+  for (const block of blocks) { live.set(block.id, block); load(block); }
+}
+
+function reload(match = () => true) { for (const block of live.values()) if (match(block)) load(block); }
+
+async function load(block) {
+  const element = $(`#fig-${block.id}`);
+  if (!element) return;
+  block.controller?.abort();
+  block.controller = new AbortController();
+  const ticket = block.ticket = (block.ticket || 0) + 1;
+  block.table = null;
+  // What this request asks for; the answer is drawn with these, whatever is ticked by then.
+  const asked = { variables: [...state.variables], interval: state.interval, year: state.year };
+  try {
+    if (block.kind === 'headline') {
+      const query = new URLSearchParams({ dataset: state.dataset, view: 'annual_metric', gauge: state.river, table: 'trends' });
+      const payload = await api(`/api/table?${query}`, { signal: block.controller.signal });
+      if (ticket !== block.ticket) return;
+      if (payload.status !== 'ready') return unavailable(element, payload);
+      drawHeadline(element, payload.rows || []);
+      return;
+    }
+    $('.tbl', element).hidden = true;
+    const payload = await api(`/api/figure?${params(block)}`, { signal: block.controller.signal });
+    if (ticket !== block.ticket) return;
+    if (payload.status !== 'ready' || !payload.figure) return unavailable(element, payload);
+    Object.assign(block, asked, { payload });
+    await draw(block);
+  } catch (error) {
+    if (ticket === block.ticket && error.name !== 'AbortError') unavailable(element, { message: error.message });
+  }
+}
+
+function unavailable(element, payload) {
+  $('.plot', element).hidden = true;
+  $('.cap', element).hidden = true;
+  const message = $('.msg', element);
+  message.hidden = false;
+  message.innerHTML = `${esc(payload.status === 'missing' && payload.build_command ? 'Not built' : payload.message || 'Unavailable')}${payload.build_command ? `<code>${esc(payload.build_command)}</code>` : ''}`;
+}
+
+// The backend's categorical blue and orange become the plate's ink and signal colour.
+// Ordered ramps and the red-blue change scales keep the backend's colours: they carry meaning.
+function houseColours(data) {
+  const text = JSON.stringify(data || []);
+  const ramp = ['#86b6ef', '#5598e7', '#1c5cab', '#104281', '#0d366b'].some(colour => text.includes(colour));
+  const swapped = text.replaceAll('#eb6834', ORANGE).replaceAll('rgba(42,120,214,', 'rgba(10,10,10,');
+  return JSON.parse(ramp ? swapped : swapped.replaceAll('#2a78d6', INK));
+}
+
+// The backend decides what is drawn; this only sets the house typography and line colours.
+function styleFigure(figure, block) {
+  const layout = JSON.parse(JSON.stringify(figure.layout || {}));
+  let data = houseColours(figure.data);
+  const notes = [];
+  delete layout.template;
+  delete layout.width;
+  const title = typeof layout.title === 'string' ? layout.title : layout.title?.text || '';
+  const lines = title.split(/<br\s*\/?\s*>/i).map(line => line.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+  if (lines.length > 1) notes.push(lines.slice(1).join(' · '));
+  const margin = layout.margin || {};
+  layout.title = { text: '' };
+  layout.margin = { l: margin.l ?? 60, r: margin.r ?? 24, b: margin.b ?? 48, t: title ? Math.max(18, (margin.t ?? 60) - (lines.length > 1 ? 58 : 38)) : margin.t ?? 18 };
+  layout.paper_bgcolor = 'rgba(0,0,0,0)';
+  layout.plot_bgcolor = 'rgba(0,0,0,0)';
+  layout.font = { family: FONT, size: 12, color: MID };
+  layout.hoverlabel = { bgcolor: '#ffffff', bordercolor: INK, font: { family: FONT, size: 12, color: INK } };
+  layout.legend = { ...(layout.legend || {}), bgcolor: 'rgba(0,0,0,0)', font: { family: FONT, size: 11, color: INK } };
+  layout.colorway = [INK, ORANGE, '#1f6fe0', '#00875a', '#c9a100'];
+  for (const key of Object.keys(layout)) if (/^[xy]axis\d*$/.test(key)) {
+    const axis = layout[key] || {};
+    const text = typeof axis.title === 'string' ? axis.title : axis.title?.text;
+    layout[key] = { ...axis, gridcolor: GRID, linecolor: INK, zerolinecolor: GRID, ticks: axis.ticks ?? '', automargin: true,
+      tickfont: { family: FONT, size: 11, color: MID },
+      title: text ? { ...(typeof axis.title === 'object' ? axis.title : {}), text: unit(text), font: { family: FONT, size: 11, color: MID }, standoff: 8 } : axis.title };
+  }
+  for (const annotation of layout.annotations || []) annotation.font = { ...(annotation.font || {}), family: FONT };
+  data = data.map(trace => trace.colorbar || trace.type === 'heatmap' ? { ...trace, colorbar: { ...(trace.colorbar || {}), outlinewidth: 0, thickness: 10,
+    tickfont: { family: FONT, size: 10, color: MID } } } : trace);
+  const hidden = Number(layout.meta?.interpolated_days_hidden) || 0;
+  if (hidden) notes.push(`${hidden} interpolated ${hidden === 1 ? 'day' : 'days'} not drawn`);
+
+  if (block.view === 'timeseries') {
+    const variables = block.variables || state.variables, monthly = (block.interval || state.interval) === 'monthly';
+    const empty = new Set(layout.meta?.empty_variables || []);
+    const narrow = (block.width || 900) < 600;   // a narrow box drops the axis titles; the legend names the lines
+    let place = 0;
+    data = data.map((trace, i) => {
+      const id = variables[i], color = SERIES[id] || MID;
+      const key = i === 0 ? 'yaxis' : `yaxis${i + 1}`, axis = { ...(layout[key] || {}) };
+      delete axis.position; delete axis.domain; delete axis.anchor; delete axis.autoshift; delete axis.shift;
+      const name = unit(trace.name);
+      if (empty.has(id)) {
+        // No value in this year: the line stays in the legend as "no data" and takes no axis.
+        layout[key] = { ...(i ? { overlaying: 'y' } : {}), visible: false, showgrid: false };
+        return { ...trace, name: `${name} — no data`, line: { color, width: 1 }, marker: { color } };
+      }
+      const slot = place++;
+      Object.assign(axis, slot === 0 ? { side: 'left', anchor: 'x', showgrid: true } : slot === 1 ? { side: 'right', anchor: 'x', showgrid: false }
+        : { side: slot === 2 ? 'left' : 'right', anchor: 'free', position: slot === 2 ? 0 : 1, autoshift: true, shift: slot === 2 ? -6 : 6, showgrid: false });
+      if (i) axis.overlaying = 'y';
+      layout[key] = { ...axis, visible: true, tickfont: { family: FONT, size: 11, color }, linecolor: color, showline: true, automargin: true,
+        title: narrow ? { text: '' } : { ...(axis.title || {}), text: unit(axis.title?.text || ''), font: { family: FONT, size: 11, color } } };
+      return { ...trace, name, mode: monthly ? 'lines+markers' : 'lines', marker: { color, size: 5, symbol: 'square' },
+        line: { color, width: id === 'discharge_vol' ? (monthly ? 2.6 : 1.5) : (monthly ? 1.8 : 1.1) } };
+    });
+    if (empty.size) notes.push(`No ${variables.filter(v => empty.has(v)).map(variableName).join(', ')} values saved for ${block.year ?? state.year}`);
+    layout.xaxis = { ...(layout.xaxis || {}), domain: [0, 1], tickformat: '%b', dtick: 'M1', hoverformat: monthly ? '%b %Y' : '%d %b %Y', showgrid: true, ticklabelmode: monthly ? 'instant' : 'period' };
+    layout.legend = { ...layout.legend, orientation: 'h', x: 0, y: 1.02, xanchor: 'left', yanchor: 'bottom' };
+    layout.margin = { l: 8, r: 8, b: 40, t: 34 };
+    layout.hovermode = 'x unified';
+  }
+  if (layout.scene) {
+    const axis3d = axis => ({ ...(axis || {}), backgroundcolor: 'rgba(0,0,0,0)', gridcolor: '#cfcfca', zerolinecolor: '#cfcfca', linecolor: INK,
+      showspikes: false, tickfont: { family: FONT, size: 10, color: MID },
+      title: { ...(typeof axis?.title === 'object' ? axis.title : { text: axis?.title || '' }), font: { family: FONT, size: 11, color: INK } } });
+    layout.scene = { ...layout.scene, xaxis: axis3d(layout.scene.xaxis), yaxis: axis3d(layout.scene.yaxis), zaxis: axis3d(layout.scene.zaxis),
+      camera: { eye: { x: -1.75, y: -2.1, z: 1.05 }, center: { x: 0, y: 0, z: -0.12 } } };
+    layout.margin = { l: 0, r: 0, t: 0, b: 0 };
+    for (const axis of ['xaxis', 'yaxis', 'zaxis']) if (layout.scene[axis].title.text) layout.scene[axis].title.text = unit(layout.scene[axis].title.text);
+    data = data.map(trace => trace.type === 'surface'
+      ? { ...trace, colorscale: [[0, '#f3f3f0'], [0.12, '#cfcfca'], [0.4, '#8b8b87'], [0.75, '#3a3a38'], [1, INK]], lighting: { ambient: 0.9, diffuse: 0.35, specular: 0.05, roughness: 0.9 },
+          contours: { z: { show: true, color: INK, width: 1, project: { z: true }, usecolormap: false } } }
+      : trace.type === 'scatter3d' ? { ...trace, line: { ...(trace.line || {}), color: ORANGE, width: 7 } } : trace);
+  }
+  return { data, layout, caption: notes.join(' · ') };
+}
+
+// One drawing at a time per figure: a second request waits for the first to finish.
+function draw(block) {
+  block.drawing = (block.drawing || Promise.resolve()).then(() => paint(block)).catch(error => {
+    const element = $(`#fig-${block.id}`);
+    if (element) unavailable(element, { message: error.message });
+  });
+  return block.drawing;
+}
+
+async function paint(block) {
+  const element = $(`#fig-${block.id}`);
+  if (!element || !block.payload || !window.Plotly || live.get(block.id) !== block) return;
+  block.width = element.clientWidth;
+  const { data, layout, caption } = styleFigure(block.payload.figure, block);

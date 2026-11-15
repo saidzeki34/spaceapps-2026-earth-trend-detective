@@ -1,0 +1,195 @@
+  const plot = $('.plot', element), cap = $('.cap', element);
+  const native = Number(block.payload.figure.layout?.height) || HEIGHT[block.view] || 360;
+  layout.height = fullId === block.id ? Math.max(native, innerHeight - 96) : native;
+  layout.autosize = true;
+  plot.style.minWidth = `${MIN_WIDTH[block.view] || 0}px`;
+  cap.textContent = caption; cap.hidden = !caption;
+  $('.msg', element).hidden = true;
+  plot.hidden = false;
+  const config = { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false, doubleClick: 'reset' };
+  // Plotly cannot add axes to a drawn graph reliably, so a changed set of axes starts a fresh one.
+  const shape = [block.view, data.map(t => `${t.type}:${t.yaxis || ''}`).join(','),
+    Object.keys(layout).filter(k => /axis\d*$/.test(k)).sort().map(k => `${k}:${layout[k].side || ''}:${layout[k].anchor || ''}:${layout[k].visible === false ? 0 : 1}`).join(',')].join('|');
+  try {
+    if (plot.dataset.shape !== shape) Plotly.purge(plot);
+    await Plotly.react(plot, data, layout, config);
+  } catch {
+    Plotly.purge(plot);
+    await Plotly.newPlot(plot, data, layout, config);
+  }
+  plot.dataset.shape = shape;
+}
+
+// Risk assessment: the saved trend rows, straight from the backend's table. No score is computed.
+function drawHeadline(element, rows) {
+  const byMetric = Object.fromEntries(rows.map(r => [r.metric, r]));
+  const change = (row, info) => finite(row.pct_per_decade) ? `${signed(row.pct_per_decade)} %` : `${signed(row.slope_per_decade)} ${/day/.test(info.unit) ? 'd' : info.unit}`;
+  const mean = (row, info) => /day of/.test(info.unit) ? `day ${significant(row.mean)}` : `${significant(row.mean)} ${info.unit}`.trim();
+  const mark = row => row.significant_fdr ? '<i class="sig on" title="Significant after FDR"></i>' : row.significant ? '<i class="sig" title="Significant before FDR only"></i>' : '';
+  const cells = HEADLINE.map(([label, metric]) => {
+    const row = byMetric[metric], info = metricInfo(metric);
+    return `<div><small>${label}<br>${esc(info.name)}</small>${row ? `<b>${change(row, info)}</b><span>per decade · p ${pValue(row.p)} ${mark(row)}</span>` : '<b>—</b><span>no saved trend</span>'}</div>`;
+  }).join('');
+  const chosen = occupation().metrics.filter(m => byMetric[m]);
+  const table = chosen.length ? `<div class="tbl-scroll"><table class="ind"><thead><tr><th>${esc(occupation().label)} indicators</th><th>Mean</th><th>Change / decade</th><th>p</th><th class="yrs">Years</th><th></th></tr></thead><tbody>${chosen.map(m => {
+    const row = byMetric[m], info = metricInfo(m);
+    return `<tr><td>${esc(info.name)}</td><td>${mean(row, info)}</td><td>${change(row, info)}</td><td>${pValue(row.p)}</td><td class="yrs">${row.first_year}–${row.last_year}</td><td>${mark(row)}</td></tr>`;
+  }).join('')}</tbody></table></div><p class="key"><span><i class="sig on"></i>significant after FDR</span><span><i class="sig"></i>before FDR only</span></p>` : '';
+  $('.msg', element).hidden = true;
+  $('.plot', element).hidden = true;
+  const body = $('.tbl', element);
+  body.hidden = false;
+  body.className = 'tbl headline';
+  body.innerHTML = `<p class="key">Saved trend indicators only. Risk assessment, requirements, exposure estimates and risk scores are not implemented. Indicator selections by occupation await team review.</p><div class="readout">${cells}</div>${table}`;
+}
+
+// ---------------------------------------------------------------- tables and export
+async function tableFor(block) {
+  if (!block.table) {
+    const query = params(block);
+    query.set('table', spec(block.view, block.dataset || state.dataset).table);
+    const payload = await api(`/api/table?${query}`);
+    if (payload.status !== 'ready') throw new Error(payload.message || 'No saved records.');
+    block.table = payload; block.page = 0;
+  }
+  return block.table;
+}
+
+function renderTable(block) {
+  const body = $(`#fig-${block.id} .tbl`), rows = block.table.rows || [], columns = block.table.columns || [];
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  block.page = Math.max(0, Math.min(block.page || 0, pages - 1));
+  const cell = v => v == null ? '—' : typeof v === 'number' ? Number(v).toLocaleString('en-GB', { maximumSignificantDigits: 6, useGrouping: false })
+    : typeof v === 'object' ? JSON.stringify(v) : /^\d{4}-\d\d-\d\dT00:00:00/.test(v) ? v.slice(0, 10) : v;
+  body.innerHTML = `<div class="tbl-scroll"><table><thead><tr>${columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.slice(block.page * PAGE_SIZE, (block.page + 1) * PAGE_SIZE).map(row => `<tr>${columns.map(c => `<td>${esc(cell(row[c]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="pager"><span>${rows.length.toLocaleString('en-GB')} records · — = missing</span>${pages > 1 ? `<button data-act="prev" ${block.page === 0 ? 'disabled' : ''}>Prev</button><span>${block.page + 1} / ${pages}</span><button data-act="next" ${block.page === pages - 1 ? 'disabled' : ''}>Next</button>` : ''}</p>`;
+  body.hidden = false;
+}
+
+function downloadCSV(block) {
+  const field = value => { let text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value); if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`; return `"${text.replaceAll('"', '""')}"`; };
+  const { columns, rows } = block.table;
+  const lines = [columns.map(field).join(','), ...rows.map(row => columns.map(c => field(row[c])).join(','))];
+  const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url; link.download = `rivascope-${block.dataset || state.dataset}-${block.view}.csv`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function setFull(id) {
+  const previous = fullId;
+  fullId = id;
+  for (const element of $$('.fig')) element.classList.toggle('full', element.dataset.block === fullId);
+  for (const element of $$('.fig [data-act="full"]')) element.textContent = element.closest('.fig').dataset.block === fullId ? 'Close' : 'Full';
+  for (const blockId of [previous, id]) if (blockId && live.get(blockId)?.payload) draw(live.get(blockId));
+}
+
+async function reloadSaved() {
+  const button = $('[data-action="refresh"]');
+  button.removeAttribute('title');
+  button.disabled = true; button.textContent = 'Reading';
+  try { catalog = await api('/api/refresh', { method: 'POST' }); courseCache.clear(); $('#about-body').innerHTML = aboutHTML(); if (!$('#app').hidden) render(); }
+  catch (error) { button.textContent = `Retry reload: ${error.message}`; button.title = error.message; }
+  finally { button.disabled = false; }
+}
+
+// ---------------------------------------------------------------- events
+document.addEventListener('click', async event => {
+  const act = event.target.closest('[data-act]');
+  if (act) {
+    const block = live.get(act.closest('.fig').dataset.block);
+    if (!block) return;
+    const body = $(`#fig-${block.id} .tbl`);
+    try {
+      if (act.dataset.act === 'full') setFull(fullId === block.id ? null : block.id);
+      else if (act.dataset.act === 'table') { if (!body.hidden) { body.hidden = true; return; } await tableFor(block); renderTable(block); }
+      else if (act.dataset.act === 'csv') { await tableFor(block); downloadCSV(block); }
+      else if (act.dataset.act === 'prev') { block.page--; renderTable(block); }
+      else if (act.dataset.act === 'next') { block.page++; renderTable(block); }
+    } catch (error) { body.hidden = false; body.innerHTML = `<p class="pager"><span>${esc(error.message)}</span></p>`; }
+    return;
+  }
+  const target = event.target.closest('[data-action], [data-country], [data-river], [data-interval], [data-region], [data-occupation]');
+  if (!target) return;
+  const d = target.dataset;
+  if (d.occupation) { chooseOccupation(d.occupation); openApp(); }
+  else if (d.country) go({ country: d.country, river: null, dataset: d.country.toLowerCase() });
+  else if (d.river) go({ river: d.river });
+  else if (d.interval) { state.interval = d.interval; for (const b of $$('[data-interval]')) b.classList.toggle('on', b.dataset.interval === d.interval); reload(b => b.view === 'timeseries'); remember(); }
+  else if (d.region) { state.region = d.region; renderResults(); remember(); }
+  else if (d.action === 'europe') go({ country: null, river: null });
+  else if (d.action === 'rivers') go({ river: null });
+  else if (d.action === 'about') $('#about').showModal();
+  else if (d.action === 'refresh') reloadSaved();
+  else if (d.action === 'retry') location.reload();
+  else if (d.action === 'expand') { state.expanded = !state.expanded; $('#layout').classList.toggle('expanded', state.expanded); target.textContent = state.expanded ? 'Map' : 'Expand'; remember(); }
+});
+
+document.addEventListener('change', event => {
+  const input = event.target, d = input.dataset;
+  if (input.id === 'occupation-select') {
+    chooseOccupation(input.value);
+    const title = $('#fig-headline h3');
+    if (title) title.textContent = `Risk assessment · ${occupation().label}`;
+    reload(b => b.kind === 'headline'); remember();
+  } else if (input.id === 'dataset') go({ dataset: input.value, river: null });
+  else if (d.variable) {
+    const chosen = $$('[data-variable]:checked').map(node => node.dataset.variable);
+    if (!chosen.length || chosen.length > 4) { input.checked = !input.checked; return; }
+    state.variables = optionValues('variable').filter(id => chosen.includes(id));
+    reload(b => b.view === 'timeseries'); remember();
+  } else if (d.section) {
+    state.sections = SECTIONS.map(s => s.id).filter(id => $(`[data-section="${id}"]`)?.checked);
+    renderResults(); remember();
+  } else if (d.opt) {
+    state.opts[d.opt] = input.value;
+    for (const other of $$(`select[data-opt="${d.opt}"]`)) other.value = input.value;
+    reload(b => usesOption(b, d.opt)); remember();
+  }
+});
+
+document.addEventListener('input', event => {
+  if (event.target.id !== 'filter') return;
+  const query = event.target.value.trim().toLowerCase();
+  for (const row of $$('#river-list li')) row.hidden = !row.textContent.toLowerCase().includes(query);
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && fullId) setFull(null);
+  if (event.target.id === 'track' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+    const years = ds().years, index = years.indexOf(Number(state.year));
+    setYear(event.key === 'Home' ? years[0] : event.key === 'End' ? years.at(-1) : years[Math.max(0, Math.min(years.length - 1, index + (event.key === 'ArrowLeft' ? -1 : 1)))]);
+    event.preventDefault();
+  }
+});
+
+// Dragging along the timeline picks the year under the pointer.
+document.addEventListener('pointerdown', event => {
+  const track = event.target.closest('#track');
+  if (!track) return;
+  track.setPointerCapture(event.pointerId);
+  track.classList.add('dragging');
+  setYear(yearAt(event.clientX));
+});
+document.addEventListener('pointermove', event => { if ($('#track.dragging')) setYear(yearAt(event.clientX)); });
+for (const name of ['pointerup', 'pointercancel']) document.addEventListener(name, () => $('#track.dragging')?.classList.remove('dragging'));
+
+// The divider between the map and the results box.
+{
+  const grip = $('#grip'), layout = $('#layout');
+  grip.addEventListener('pointerdown', event => { grip.setPointerCapture(event.pointerId); grip.classList.add('dragging'); });
+  grip.addEventListener('pointermove', event => {
+    if (!grip.classList.contains('dragging')) return;
+    const box = layout.getBoundingClientRect(), side = $('#side').getBoundingClientRect().width;
+    layout.style.setProperty('--res', `${Math.max(420, Math.min(box.width - side - 240, box.right - event.clientX))}px`);
+  });
+  for (const name of ['pointerup', 'pointercancel']) grip.addEventListener(name, () => grip.classList.remove('dragging'));
+}
+
+// When the results box changes width, every figure is laid out again for its new size.
+new ResizeObserver(() => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { for (const block of live.values()) if (block.payload) draw(block); }, 120);
+}).observe($('#results'));
+window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye'));
+start();

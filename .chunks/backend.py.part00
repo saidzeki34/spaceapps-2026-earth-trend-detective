@@ -1,0 +1,294 @@
+"""Read-only presentation adapter for the team's saved trend results.
+
+No download, build, gap filling, simulated observations or predictions occur here.
+Scientific calculations and figures remain owned by ``mountain_water.trend``.
+"""
+from __future__ import annotations
+
+import calendar
+import json
+import threading
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from pyproj import Transformer
+
+from mountain_water.trend import pipeline, plots, registry, sources, stations
+
+DATA_ROOT = Path(__file__).resolve().parents[2] / "data"
+
+DATASETS = {
+    "ch": ("Switzerland / CAMELS-CH", "CH", "observed", "trend", "build"),
+    "no": ("Norway / NVE + seNorge", "NO", "observed", "trend_no", "build --source nve"),
+    "ch_gldas": ("Switzerland / GLDAS-2.1", "CH", "model", "trend_gldas", "build --source gldas"),
+    "no_gldas": ("Norway / GLDAS-2.1", "NO", "model", "trend_no_gldas", "build --source gldas --region no"),
+    "stations": ("Station network", "", "network", "trend_stations", "stations"),
+}
+VARIABLE_LABELS = {
+    "discharge_vol": "Discharge", "discharge_spec": "Specific discharge", "waterlevel": "Water level",
+    "precipitation": "Precipitation", "temperature_mean": "Air temperature", "temperature_min": "Minimum temperature",
+    "temperature_max": "Maximum temperature", "swe": "Snow water equivalent", "rel_sun_dur": "Sunshine duration",
+    "evap": "Evapotranspiration", "snowmelt": "Snowmelt", "snowfall": "Snowfall",
+    "runoff_surface": "Surface runoff", "runoff_base": "Base runoff",
+}
+MODEL_NOTE = "GLDAS-2.1 is unrouted land-surface model runoff; it is not a river measurement or forecast."
+TREND_NOTE = "Saved backend results: review coverage, gap filling, serial dependence and FDR before interpreting trends. Association does not establish causation."
+STATION_NOTE = "Station network uses complete calendar years and its own selection and baseline; it differs from the hydrological-year catchment selection."
+
+# id, label, scope, matching table, option names
+VIEW_SPECS = (
+    ("timeseries", "Time series", "catchment", "daily", ("year", "variable", "interval")),
+    ("hydrograph_vs_history", "Year against history", "catchment", "daily", ("year",)),
+    ("regime_by_window", "Seasonal regime", "catchment", "regime_monthly", ("normalized",)),
+    ("annual_metric", "Annual metric and trend", "catchment", "trends", ("metric",)),
+    ("daily_heatmap", "Daily flow heatmap", "catchment", "daily", ("log_scale",)),
+    ("window_means", "Window means", "catchment", "window_comparison", ("metric",)),
+    ("correlation_matrix", "Driver correlations", "catchment", "correlations", ()),
+    ("driver_scatter", "Flow against driver", "catchment", "correlations", ("metric", "driver")),
+    ("flow_surface", "Flow surface", "catchment", "daily", ("year",)),
+    ("trend_heatmap", "Catchment trend heatmap", "region", "trends", ("kind",)),
+    ("window_change_heatmap", "Window change heatmap", "region", "window_comparison", ("metric",)),
+    ("trend_map", "Catchment trend map", "region", "trends", ("metric",)),
+    ("trend_vs_attribute", "Trend against catchment attribute", "region", "trend_vs_attributes", ("metric", "attribute")),
+    ("attribution_bars", "Statistical runoff attribution", "region", "attribution", ()),
+    ("selection_summary", "Catchment selection", "region", "selection_log", ()),
+    ("source_regime", "Observed / GLDAS regime", "sources", "source_regime", ()),
+    ("source_scatter", "Observed / GLDAS means", "sources", "source_annual", ("metric",)),
+    ("source_trend_scatter", "Observed / GLDAS trends", "sources", "source_trends", ("metric",)),
+    ("station_month_heatmap", "Station / month changes", "stations", "station_trends", ()),
+    ("station_year_heatmaps", "Station / year anomalies", "stations", "station_year_anomalies", ()),
+    ("driver_change_scatter", "Station driver changes", "stations", "station_drivers", ("pair",)),
+)
+
+
+def _clean(value):
+    """JSON numbers remain finite; missing observations remain null."""
+    if isinstance(value, dict):
+        return {str(k): _clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [_clean(v) for v in value]
+    if isinstance(value, np.generic):
+        return _clean(value.item())
+    if isinstance(value, (pd.Timestamp, Path)):
+        return str(value)
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
+def _text(value):
+    return "" if value is None or pd.isna(value) else str(value).replace("_", " ").strip()
+
+
+def _option(name, label, values):
+    return {"name": name, "label": label, "values": [{"id": str(k), "label": str(v)} for k, v in values]}
+
+
+class Backend:
+    def __init__(self, data_root: Path | None = None):
+        self.data_root = Path(data_root) if data_root is not None else DATA_ROOT
+        self._cache = {}
+        self._comparisons = {}
+        self._lock = threading.RLock()
+
+    def refresh(self):
+        with self._lock:
+            self._cache.clear()
+            self._comparisons.clear()
+        return self.catalogue()
+
+    def _load(self, dataset):
+        if dataset not in DATASETS:
+            raise ValueError("Unknown dataset")
+        label, country, kind, folder, command = DATASETS[dataset]
+        directory = self.data_root / "processed" / folder
+        names = stations.TABLES if dataset == "stations" else pipeline.TABLES
+        files = [directory / "meta.json", *(directory / f"{name}.parquet" for name in names)]
+        base = dict(id=dataset, label=label, country=country, region=country.lower(), kind=kind,
+                    build_command=f"python -m mountain_water.trend {command}",
+                    command=f"python -m mountain_water.trend {command}", gauges=[], views=[])
+        if not all(path.is_file() for path in files):
+            return None, dict(base, status="missing", message="Saved backend results are not built on this computer.")
+        signature = tuple((path.stat().st_mtime_ns, path.stat().st_size) for path in files)
+        with self._lock:
+            cached = self._cache.get(dataset)
+            if cached and cached[0] == signature:
+                return cached[1], dict(base, status="ready")
+            try:
+                result = stations.load(directory) if dataset == "stations" else pipeline.load(directory)
+                if not result.gauges:
+                    return None, dict(base, status="missing", message="This saved build contains no selected gauges.")
+            except Exception as error:
+                return None, dict(base, status="error", message=f"Saved results could not be read ({type(error).__name__}). Rebuild or restore this dataset.")
+            self._cache[dataset] = (signature, result)
+            self._comparisons.clear()
+            return result, dict(base, status="ready")
+
+    def _gauges(self, result, dataset):
+        network = dataset == "stations"
+        attrs = result.stations if network else result.attributes[result.attributes["gauge_id"].isin(result.gauges)]
+        rows = []
+        swiss_positions = {}
+        swiss_attrs = attrs
+        if network:
+            swiss, _ = self._load("ch")
+            swiss_attrs = swiss.attributes if swiss is not None else pd.DataFrame()
+        if {"gauge_easting", "gauge_northing"} <= set(swiss_attrs):
+            # CAMELS-CH lat/lon are rounded; use its station coordinates in LV95.
+            transformer = Transformer.from_crs("EPSG:2056", "EPSG:4326", always_xy=True)
+            valid = swiss_attrs.dropna(subset=["gauge_easting", "gauge_northing"])
+            longitude, latitude = transformer.transform(valid.gauge_easting.to_numpy(), valid.gauge_northing.to_numpy())
+            swiss_positions = {str(g): (float(la), float(lo)) for g, la, lo in zip(valid.gauge_id, latitude, longitude)
+                               if np.isfinite(la) and np.isfinite(lo)}
+        for row in attrs.to_dict("records"):
+            gauge_id = str(row["gauge_id"])
+            name = _text(row.get("name"))
+            river = _text(row.get("river") if network else row.get("water_body", row.get("river")))
+            country = row.get("country") or DATASETS[dataset][1]
+            if country == "Switzerland": country = "CH"
+            if country == "Norway": country = "NO"
+            latitude, longitude = (row.get("lat"), row.get("lon"))
+            if country != "NO" and gauge_id in swiss_positions:
+                latitude, longitude = swiss_positions[gauge_id]
+            rows.append(dict(id=gauge_id, name=name, place=name, river=river,
+                             label=f"{river} / {name} ({gauge_id})", country=country,
+                             lat=latitude, lon=longitude, area_km2=row.get("area"),
+                             elevation_m=row.get("elevation"),
+                             elevation_statistic=row.get("elevation_statistic", "median" if country == "NO" else "mean")))
+        return _clean(rows)
+
+    def _options(self, result, dataset):
+        if dataset == "stations":
+            return {"pair": _option("pair", "Driver pair", [("snow", "Half-volume date / snow-free date"),
+                                                            ("precipitation", "Aug–Sep low flow / Jul–Sep precipitation")])}
+        metrics = [m for m in registry.METRICS if m in result.annual and result.annual[m].notna().any()]
+        variables = [v for v in VARIABLE_LABELS if v in result.daily and result.daily[v].notna().any()]
+        units = result.meta.get("units", {})
+        label = lambda m: f"{registry.info(m).label} [{registry.info(m).unit}]"
+        return {
+            "metric": _option("metric", "Annual metric", [(m, label(m)) for m in metrics]),
+            "driver": _option("driver", "Driver", [(m, label(m)) for m in metrics if m in registry.DRIVER_METRICS]),
+            "year": _option("year", "Hydrological year", [(y, y) for y in sorted(result.annual.hydro_year.unique())]),
+            "variable": _option("variable", "Time-series variable", [(v, f"{VARIABLE_LABELS[v]} [{units.get(v, '')}]") for v in variables]),
+            "attribute": _option("attribute", "Catchment attribute", [(a, a.title()) for a in pipeline.ATTRIBUTE_CANDIDATES if a in result.attributes]),
+            "interval": _option("interval", "Interval", [("daily", "Daily"), ("monthly", "Monthly mean")]),
+            "kind": _option("kind", "Metric group", [("volume", "Volume"), ("timing", "Timing"), ("variability", "Variability"), ("driver", "Drivers")]),
+            "normalized": _option("normalized", "Regime units", [("false", "Discharge"), ("true", "Normalized")]),
+            "log_scale": _option("log_scale", "Colour scale", [("true", "Logarithmic"), ("false", "Linear")]),
+        }
+
+    def _views(self, result, dataset):
+        options = self._options(result, dataset)
+        return [{"id": ident, "label": label, "scope": scope, "table": table,
+                 "options": [options[n] for n in names]} for ident, label, scope, table, names in VIEW_SPECS
+                if (scope == "stations") == (dataset == "stations") and all(options[n]["values"] for n in names)]
+
+    def catalogue(self):
+        datasets = []
+        for dataset in DATASETS:
+            result, item = self._load(dataset)
+            if result is not None:
+                item.update(gauges=self._gauges(result, dataset), views=self._views(result, dataset),
+                            count=len(result.gauges), source=result.meta.get("source", "station network"),
+                            units=result.meta.get("units", {}), settings=result.meta.get("settings", {}),
+                            provenance=result.meta.get("provenance", result.meta.get("sources", {})))
+                if dataset == "stations":
+                    item.update(countries=result.countries, years=sorted(result.annual.year.unique().tolist()), notes=[STATION_NOTE])
+                else:
+                    options = self._options(result, dataset)
+                    item.update(years=sorted(result.annual.hydro_year.unique().tolist()),
+                                windows=result.meta.get("windows", []), metrics=options["metric"]["values"],
+                                variables=options["variable"]["values"],
+                                first_date=str(result.daily.date.min().date()), last_date=str(result.daily.date.max().date()),
+                                notes=[TREND_NOTE] + ([MODEL_NOTE] if item["kind"] == "model" else []))
+            datasets.append(item)
+        return _clean({"datasets": datasets, "stations": datasets[-1], "views": [dict(id=a, label=b, scope=c, table=d) for a,b,c,d,_ in VIEW_SPECS],
+                       "incomplete": ["Risk assessment", "Prediction model"],
+                       "notes": ["Only saved local results are read. Refresh re-reads local files; it does not download or build data."]})
+
+    def _request(self, query):
+        dataset = str(query.get("dataset", "ch"))
+        result, state = self._load(dataset)
+        if result is None: return dataset, None, state, None
+        view = str(query.get("view", "station_month_heatmap" if dataset == "stations" else "timeseries"))
+        spec = next((v for v in self._views(result, dataset) if v["id"] == view), None)
+        if spec is None: raise ValueError("Unknown view for this dataset")
+        gauge = str(query.get("gauge") or result.gauges[0])
+        if gauge not in result.gauges: raise ValueError("Gauge is not in this dataset's saved selection")
+        context = dict(dataset=dataset, source=state["label"], title=spec["label"], gauge=gauge,
+                       period=f"{result.annual['year' if dataset == 'stations' else 'hydro_year'].min()}–{result.annual['year' if dataset == 'stations' else 'hydro_year'].max()}",
+                       calendar="calendar years" if dataset == "stations" else "hydrological years",
+                       hydro_year_start_month=result.meta.get("settings", {}).get("hydro_year_start_month"),
+                       kind=state["kind"])
+        return dataset, result, context, spec
+
+    def _paired(self, dataset):
+        region = dataset.split("_")[0]
+        obs, obs_state = self._load(region)
+        model, model_state = self._load(f"{region}_gldas")
+        if obs is None: return None, None, obs_state
+        if model is None: return None, None, model_state
+        if not (set(obs.gauges) & set(model.gauges)):
+            return None, None, dict(status="missing", message="Observed and GLDAS builds have no common gauges.")
+        return obs, model, None
+
+    def _comparison(self, dataset, obs, model, which):
+        key = (dataset.split("_")[0], which)
+        with self._lock:
+            if key not in self._comparisons:
+                metrics = [m for m in registry.METRICS if m in obs.annual and m in model.annual]
+                self._comparisons[key] = (sources.compare_trends if which == "trends" else sources.compare_annual)(obs, model, metrics=metrics)
+            return self._comparisons[key]
+
+    @staticmethod
+    def _source_context(context, comparison, kind):
+        """Describe coverage reported by the backend, without refitting its results."""
+        context = dict(context)
+        context["source"] = "NVE + seNorge / GLDAS-2.1" if context["dataset"].startswith("no") else "CAMELS-CH / GLDAS-2.1"
+        context["period"] = "Common saved years"
+        context["calendar"] = "valid coverage varies by gauge/metric"
+        if kind == "regime":
+            years = comparison.attrs.get("years")
+            if years:
+                context.update(period=f"{years[0]}–{years[1]}", calendar="common hydrological years")
+        elif kind == "annual" and not comparison.empty:
+            context.update(period=f"{int(comparison.first_year.min())}–{int(comparison.last_year.max())}",
+                           calendar="common hydrological years; valid coverage varies by gauge/metric")
+        return context
+
+    def _daily(self, result, gauge, query):
+        daily = result.daily[result.daily.gauge_id == gauge].copy()
+        year = int(query.get("year") or daily.hydro_year.max())
+        daily = daily[daily.hydro_year == year].sort_values("date")
+        if daily.empty: raise ValueError("No saved data for this gauge and hydrological year")
+        return daily
+
+    @staticmethod
+    def _observed_only(frame):
+        """Blank the values the trend section interpolated across short gaps (its ``*_filled`` flags).
+
+        Graphs of daily records then draw recorded values only; an interpolated day shows as a gap.
+        Returns (copy, {column: number of blanked days}). The saved tables are never changed.
+        """
+        frame, blanked = frame.copy(), {}
+        for flag in [c for c in frame.columns if c.endswith("_filled")]:
+            column = flag[: -len("_filled")]
+            if column not in frame: continue
+            mask = frame[flag].fillna(False).astype(bool) & frame[column].notna()
+            blanked[column] = int(mask.sum())
+            frame.loc[mask, column] = np.nan
+        return frame, blanked
+
+    def _observed_gauge(self, result, gauge):
+        """The saved results with one gauge's interpolated days blanked, for the backend's daily-record figures."""
+        daily, blanked = self._observed_only(result.daily[result.daily.gauge_id == gauge])
+        return replace(result, daily=daily), blanked.get("discharge_vol", 0)
+
+    def _timeseries(self, result, gauge, query):
+        daily, blanked = self._observed_only(self._daily(result, gauge, query))
+        variables = str(query.get("variables") or query.get("variable") or "discharge_vol").split(",")
+        if not 1 <= len(variables) <= 4: raise ValueError("Choose one to four variables")
+        if any(v not in VARIABLE_LABELS or v not in daily for v in variables): raise ValueError("Variable not available in this dataset")

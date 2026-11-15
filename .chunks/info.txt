@@ -1,0 +1,17 @@
+commit: 3e542a285cdb5f98f8c2ad244c7877186b24b0de
+node --check main.js: ok
+node --check map.js: ok
+py_compile ui: ok
+--- vendor
+total 12
+drwxr-xr-x 3 runner runner 4096 Nov 15 11:13 .
+drwxr-xr-x 5 runner runner 4096 Nov 15 11:13 ..
+drwxr-xr-x 2 runner runner 4096 Nov 15 11:13 leaflet
+--- files mentioning physic
+mountain_water/ui/prediction_view.py
+--- web/data
+total 740
+drwxr-xr-x 2 runner runner   4096 Nov 15 11:13 .
+drwxr-xr-x 5 runner runner   4096 Nov 15 11:13 ..
+-rw-r--r-- 1 runner runner 218203 Nov 15 11:13 gauge_courses.geojson
+-rw-r--r-- 1 runner runner 525980 Nov 15 11:13 geodata.json
